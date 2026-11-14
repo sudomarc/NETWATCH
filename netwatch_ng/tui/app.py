@@ -7,6 +7,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event
 
 from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, wifi_intelligence
+from netwatch_ng.discovery import devices as devices_mod
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
@@ -105,11 +106,13 @@ def _screen_lines(
     settings_message: str | None = None,
     firewall_message: str | None = None,
     traffic_message: str | None = None,
+    device_result=None,
+    device_message: str | None = None,
 ) -> list[str]:
     if label == "Dashboard":
         return build_dashboard_lines()
     if label == "Devices":
-        return build_devices_lines()
+        return build_devices_lines(device_result, device_message)
     if label == "Router Intelligence":
         report, services = router_result if router_result is not None else (None, None)
         return build_router_lines(report, services, router_message)
@@ -156,6 +159,9 @@ def run(stdscr) -> None:
     router_probe: Future | None = None
     wifi_scan: Future | None = None
     diagnostic_task: Future | None = None
+    device_scan: Future | None = None
+    device_result = None
+    device_message = None
     router_result = None
     wifi_result = None
     diagnostic_result = None
@@ -214,7 +220,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
                 except Exception as exc:
                     lines = [f"Error building screen: {exc}"]
@@ -232,7 +238,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
 
             if wifi_scan is not None and wifi_scan.done():
@@ -247,7 +253,27 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+
+            if device_scan is not None and device_scan.done():
+                try:
+                    device_result = device_scan.result()
+                    device_message = f"Active Nmap discovery completed: {len(device_result)} device(s)."
+                    activity_log.record_event("Devices", "active_scan", "success", device_message)
+                except Exception as exc:
+                    device_message = f"Active Nmap discovery failed: {exc}"
+                    try:
+                        activity_log.record_event("Devices", "active_scan", "error", str(exc))
+                    except Exception:
+                        pass
+                device_scan = None
+                if label == "Devices":
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
 
             if diagnostic_task is not None and diagnostic_task.done():
@@ -267,7 +293,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
 
             for i, line in enumerate(lines):
@@ -291,6 +317,8 @@ def run(stdscr) -> None:
                 footer = "Firewall: b block IP, u unblock IP, r refresh"
             elif label == "Traffic Manager":
                 footer = "Traffic: l set limit, c clear limit, r refresh"
+            elif label == "Devices":
+                footer = "Devices: n active Nmap scan, r refresh"
             stdscr.addstr(height - 1, 0, footer[: max(width - 1, 0)], curses.A_DIM)
             stdscr.refresh()
 
@@ -333,6 +361,18 @@ def run(stdscr) -> None:
                 else:
                     reset_message = "Reset cancelled; no changes requested."
                 previous_selected = None
+            elif key in (ord("n"), ord("N")) and label == "Devices":
+                target = _prompt_text(stdscr, "Authorized target/subnet for Nmap discovery: ", 253)
+                if target:
+                    if device_scan is None:
+                        device_message = f"Active discovery running for {target}..."
+                        lines = _screen_lines(
+                            label, status, router_result, router_message,
+                            wifi_result, wifi_message, reset_message,
+                            diagnostic_result, diagnostic_message, settings_message,
+                            firewall_message, traffic_message, device_result, device_message,
+                        )
+                        device_scan = executor.submit(devices_mod.active_scan, target)
             elif key in (ord("b"), ord("B"), ord("u"), ord("U")) and label == "Firewall":
                 target = _prompt_text(stdscr, "IPv4/IPv6 address: ", 64)
                 if target:
@@ -409,7 +449,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
                     router_probe = executor.submit(router_intelligence.inspect_and_probe_gateway)
             elif key in (ord("s"), ord("S")) and label == "Wi-Fi Intelligence":
@@ -419,7 +459,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
-                        firewall_message, traffic_message,
+                        firewall_message, traffic_message, device_result, device_message,
                     )
                     wifi_scan = executor.submit(
                         wifi_intelligence.scan_available_networks,
