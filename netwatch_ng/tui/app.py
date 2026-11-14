@@ -98,6 +98,16 @@ def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
 
 
 
+def _scan_wifi(cancel_event: Event):
+    preferred = settings.load_settings()["preferred_interface"]
+    if preferred:
+        available = {item.name for item in wifi_intelligence.list_wireless_interfaces()}
+        if preferred not in available:
+            raise RuntimeError(f"preferred Wi-Fi interface is unavailable: {preferred}")
+        return preferred, wifi_intelligence.scan_networks(preferred, cancel_event=cancel_event)
+    return wifi_intelligence.scan_available_networks(cancel_event=cancel_event)
+
+
 def _save_setting_value(key: str, value, description: str) -> tuple[bool, str]:
     try:
         settings.update_setting(key, value)
@@ -558,10 +568,7 @@ def run(stdscr) -> None:
                         diagnostic_result, diagnostic_message, settings_message,
                         firewall_message, traffic_message, device_result, device_message,
                     )
-                    wifi_scan = executor.submit(
-                        wifi_intelligence.scan_available_networks,
-                        cancel_event=wifi_cancel,
-                    )
+                    wifi_scan = executor.submit(_scan_wifi, wifi_cancel)
             elif key in (ord("p"), ord("P")) and label == "Network Diagnostics":
                 if diagnostic_task is None:
                     diagnostic_message = "Pinging the configured default gateway..."
@@ -595,6 +602,37 @@ def run(stdscr) -> None:
                 )
                 if saved:
                     refresh_seconds = 0
+                previous_selected = None
+            elif key in (ord("t"), ord("T")) and label == "Settings":
+                timeout_text = _prompt_text(stdscr, "Nmap scan timeout (10-300 seconds): ", 3)
+                if timeout_text:
+                    try:
+                        timeout_value = int(timeout_text)
+                        description = f"Default Nmap timeout set to {timeout_value} seconds."
+                        _, settings_message = _save_setting_value(
+                            "scan_timeout_seconds", timeout_value, description
+                        )
+                    except ValueError:
+                        settings_message = "Scan timeout must be an integer from 10 to 300."
+                previous_selected = None
+            elif key in (ord("i"), ord("I")) and label == "Settings":
+                interface = _prompt_text(stdscr, "Preferred Wi-Fi interface (blank clears): ", 15)
+                if not interface:
+                    _, settings_message = _save_setting_value(
+                        "preferred_interface", None, "Preferred Wi-Fi interface cleared."
+                    )
+                else:
+                    try:
+                        available = {item.name for item in wifi_intelligence.list_wireless_interfaces()}
+                        if interface not in available:
+                            settings_message = f"Not a detected Wi-Fi interface: {interface}"
+                        else:
+                            _, settings_message = _save_setting_value(
+                                "preferred_interface", interface,
+                                f"Preferred Wi-Fi interface set to {interface}.",
+                            )
+                    except Exception as exc:
+                        settings_message = f"Could not inspect Wi-Fi interfaces: {exc}"
                 previous_selected = None
     finally:
         wifi_cancel.set()
