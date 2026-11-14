@@ -11,6 +11,7 @@ from __future__ import annotations
 import curses
 
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
+from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 
 IMPLEMENTED = "implemented"
@@ -18,7 +19,7 @@ PLANNED = "planned"
 
 MENU: list[tuple[str, str]] = [
     ("Dashboard", IMPLEMENTED),
-    ("Devices", PLANNED),
+    ("Devices", IMPLEMENTED),
     ("Router Intelligence", PLANNED),
     ("Wi-Fi Intelligence", PLANNED),
     ("Firewall", PLANNED),
@@ -35,7 +36,9 @@ def _about_lines() -> list[str]:
     return [
         "NETWATCH NG — Linux network supervision/administration TUI",
         "Sprint 1: network engine (interfaces, gateway, DNS) + dependency",
-        "detection. Discovery, Wi-Fi, firewall, traffic shaping, router",
+        "detection. Sprint 2: passive device discovery (ARP/NDP table),",
+        "OUI-based vendor ID, scan history (new/missing/reappeared).",
+        "Active nmap scans, Wi-Fi, firewall, traffic shaping, router",
         "intelligence and diagnostics are not implemented yet.",
         "Repository: github.com/sudomarc/NETWATCH (branch v2/python-rewrite)",
     ]
@@ -52,6 +55,8 @@ def _planned_lines(label: str) -> list[str]:
 def _screen_lines(label: str, status: str) -> list[str]:
     if label == "Dashboard":
         return build_dashboard_lines()
+    if label == "Devices":
+        return build_devices_lines()
     if label == "System Manager":
         return build_system_manager_lines()
     if label == "About":
