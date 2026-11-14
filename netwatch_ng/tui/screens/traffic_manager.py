@@ -1,21 +1,24 @@
-"""Traffic Manager screen for egress limits only."""
-
+"""Traffic Manager overview for NETWATCH-owned packet policers."""
 from __future__ import annotations
 
 from netwatch_ng.traffic import list_limits
 
 
 def build_traffic_lines() -> list[str]:
-    lines = ["Traffic Manager"]
-    limits = list_limits()
+    lines = [
+        "Traffic Manager",
+        "Backend: tc clsact packet policing (excess packets are dropped).",
+        "This is not smooth queue-based HTB shaping.",
+    ]
+    try:
+        limits = list_limits()
+    except Exception as exc:
+        return [*lines, f"Traffic state unavailable: {exc}"]
     if not limits:
-        lines.extend([
-            "No NETWATCH-managed tc qdisc is currently active.",
-            "Ingress IFB shaping is not implemented; only egress rate caps are exposed.",
-        ])
+        lines.append("No NETWATCH-owned rate policers are currently active.")
+        lines.append("The traffic engine API supports egress and ingress rate caps.")
         return lines
-
-    lines.append("Active NETWATCH egress limits:")
+    lines.append("Active NETWATCH rate policers:")
     for limit in limits:
-        lines.append(f"  {limit.interface}: {limit.rate_kbps} kbit/s")
+        lines.append(f"  {limit.interface} {limit.direction}: {limit.rate_kbps} kbit/s")
     return lines

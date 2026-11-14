@@ -1,16 +1,20 @@
-"""NETWATCH NG TUI shell with explicit status for implemented modules."""
+"""NETWATCH NG keyboard-driven terminal application."""
 from __future__ import annotations
 
 import curses
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event
 
-from netwatch_ng import reset_manager, router_intelligence, wifi_intelligence
+from netwatch_ng import activity_log, diagnostics, reset_manager, router_intelligence, settings, wifi_intelligence
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
+from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
 from netwatch_ng.tui.screens.firewall import build_firewall_lines
+from netwatch_ng.tui.screens.logs import build_logs_lines
 from netwatch_ng.tui.screens.reset_manager import build_reset_lines
 from netwatch_ng.tui.screens.router_intelligence import build_router_lines
+from netwatch_ng.tui.screens.settings import build_settings_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 from netwatch_ng.tui.screens.traffic_manager import build_traffic_lines
 from netwatch_ng.tui.screens.wifi_intelligence import build_wifi_lines
@@ -26,10 +30,10 @@ MENU: list[tuple[str, str]] = [
     ("Firewall", IMPLEMENTED),
     ("Traffic Manager", IMPLEMENTED),
     ("Reset Manager", IMPLEMENTED),
-    ("Network Diagnostics", PLANNED),
+    ("Network Diagnostics", IMPLEMENTED),
     ("System Manager", IMPLEMENTED),
-    ("Settings", PLANNED),
-    ("Logs", PLANNED),
+    ("Settings", IMPLEMENTED),
+    ("Logs", IMPLEMENTED),
     ("About", IMPLEMENTED),
 ]
 
@@ -37,10 +41,12 @@ MENU: list[tuple[str, str]] = [
 def _about_lines() -> list[str]:
     return [
         "NETWATCH NG — Linux network supervision/administration TUI",
-        "Implemented: network engine, device discovery and identification,",
-        "router gateway intelligence, Wi-Fi inventory and AP survey,",
-        "rule-based firewall block management, and traffic rate policing.",
-        "Still planned: diagnostics, settings, logs and package distribution.",
+        "Implemented: network core, passive/Nmap discovery engine, device",
+        "identification, gateway inspection, Wi-Fi inventory/survey,",
+        "firewall API, tc packet policing, reset preview, diagnostics,",
+        "persistent settings and bounded activity logs.",
+        "Traffic limits use packet policing (excess packets are dropped),",
+        "not smooth queue-based HTB shaping.",
         "Repository: github.com/sudomarc/NETWATCH",
     ]
 
@@ -48,9 +54,42 @@ def _about_lines() -> list[str]:
 def _planned_lines(label: str) -> list[str]:
     return [
         f"{label}: not implemented yet.",
-        "This module is scheduled in a later sprint of the NETWATCH NG",
-        "rewrite and intentionally shows no simulated data or buttons.",
+        "This module is scheduled in a later sprint and intentionally",
+        "shows no simulated data or non-functional controls.",
     ]
+
+
+def _trace_gateway():
+    route = (
+        router_intelligence.network.get_default_gateway("inet")
+        or router_intelligence.network.get_default_gateway("inet6")
+    )
+    if route is None or route.gateway is None:
+        return diagnostics.DiagnosticResult(
+            "Traceroute", False, "No default gateway is configured"
+        )
+    return diagnostics.trace_route(route.gateway)
+
+
+def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
+    height, width = stdscr.getmaxyx()
+    stdscr.move(height - 1, 0)
+    stdscr.clrtoeol()
+    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
+    curses.echo()
+    try:
+        curses.curs_set(1)
+    except curses.error:
+        pass
+    try:
+        raw = stdscr.getstr(height - 1, min(len(prompt), max(width - 1, 0)), max_length)
+    finally:
+        curses.noecho()
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+    return raw.decode("utf-8", errors="replace").strip()
 
 
 def _screen_lines(
@@ -61,6 +100,9 @@ def _screen_lines(
     wifi_result: tuple | None = None,
     wifi_message: str | None = None,
     reset_message: str | None = None,
+    diagnostic_result: diagnostics.DiagnosticResult | None = None,
+    diagnostic_message: str | None = None,
+    settings_message: str | None = None,
 ) -> list[str]:
     if label == "Dashboard":
         return build_dashboard_lines()
@@ -78,8 +120,14 @@ def _screen_lines(
         return build_traffic_lines()
     if label == "Reset Manager":
         return build_reset_lines(reset_message)
+    if label == "Network Diagnostics":
+        return build_diagnostics_lines(diagnostic_result, diagnostic_message)
     if label == "System Manager":
         return build_system_manager_lines()
+    if label == "Settings":
+        return build_settings_lines(settings_message)
+    if label == "Logs":
+        return build_logs_lines()
     if label == "About":
         return _about_lines()
     return _planned_lines(label)
@@ -102,18 +150,30 @@ def run(stdscr) -> None:
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
 
     selected = 0
-    executor = ThreadPoolExecutor(max_workers=1)
+    executor = ThreadPoolExecutor(max_workers=2)
     router_probe: Future | None = None
     wifi_scan: Future | None = None
+    diagnostic_task: Future | None = None
     router_result = None
     wifi_result = None
+    diagnostic_result = None
     router_message = None
     wifi_message = None
+    diagnostic_message = None
     reset_message = None
+    settings_message = None
     wifi_cancel = Event()
     previous_selected = None
     lines: list[str] = []
     try:
+        try:
+            current_settings = settings.load_settings()
+            refresh_seconds = current_settings["refresh_seconds"]
+        except Exception as exc:
+            refresh_seconds = 0
+            settings_message = f"Settings unavailable; automatic refresh disabled: {exc}"
+        last_refresh = time.monotonic()
+
         while True:
             stdscr.erase()
             height, width = stdscr.getmaxyx()
@@ -124,6 +184,10 @@ def run(stdscr) -> None:
                 if key in (ord("q"), ord("Q")):
                     break
                 continue
+
+            if refresh_seconds and time.monotonic() - last_refresh >= refresh_seconds:
+                previous_selected = None
+                last_refresh = time.monotonic()
 
             stdscr.addstr(0, 0, "NETWATCH NG".ljust(max(width - 1, 0)), curses.A_BOLD)
             stdscr.addstr(1, 0, "-" * max(width - 1, 0))
@@ -145,6 +209,7 @@ def run(stdscr) -> None:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
                     )
                 except Exception as exc:
                     lines = [f"Error building screen: {exc}"]
@@ -161,6 +226,7 @@ def run(stdscr) -> None:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
                     )
 
             if wifi_scan is not None and wifi_scan.done():
@@ -174,6 +240,26 @@ def run(stdscr) -> None:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                    )
+
+            if diagnostic_task is not None and diagnostic_task.done():
+                try:
+                    diagnostic_result = diagnostic_task.result()
+                    diagnostic_message = None
+                    activity_log.record_event(
+                        "Diagnostics", diagnostic_result.name,
+                        "success" if diagnostic_result.ok else "warning",
+                        diagnostic_result.summary,
+                    )
+                except Exception as exc:
+                    diagnostic_message = f"Diagnostic failed: {exc}"
+                diagnostic_task = None
+                if label == "Network Diagnostics":
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
                     )
 
             for i, line in enumerate(lines):
@@ -189,6 +275,10 @@ def run(stdscr) -> None:
                 footer = "Up/Down: navigate   s: survey access points   r: refresh   q: quit"
             elif label == "Reset Manager":
                 footer = "Up/Down: navigate   x: reset (confirmation required)   r: refresh   q: quit"
+            elif label == "Network Diagnostics":
+                footer = "Up/Down: navigate   p: ping gateway   t: trace route   d: DNS lookup   r: refresh"
+            elif label == "Settings":
+                footer = "Up/Down: navigate   + / -: refresh interval   0: disable   r: refresh"
             stdscr.addstr(height - 1, 0, footer[: max(width - 1, 0)], curses.A_DIM)
             stdscr.refresh()
 
@@ -199,9 +289,11 @@ def run(stdscr) -> None:
             if key == curses.KEY_UP:
                 selected = (selected - 1) % len(MENU)
                 reset_message = None
+                settings_message = None
             elif key == curses.KEY_DOWN:
                 selected = (selected + 1) % len(MENU)
                 reset_message = None
+                settings_message = None
             elif key in (ord("r"), ord("R")):
                 previous_selected = None
             elif key in (ord("x"), ord("X")) and label == "Reset Manager":
@@ -212,7 +304,16 @@ def run(stdscr) -> None:
                 stdscr.refresh()
                 confirmation = stdscr.getch()
                 if confirmation in (ord("y"), ord("Y")):
-                    reset_message = _reset_summary(reset_manager.reset_all())
+                    report = reset_manager.reset_all()
+                    reset_message = _reset_summary(report)
+                    actions = report.firewall_actions + report.traffic_actions
+                    ok = all(action.success for action in actions)
+                    try:
+                        activity_log.record_event(
+                            "Reset", "reset_all", "success" if ok else "warning", reset_message
+                        )
+                    except Exception as exc:
+                        reset_message += f" (activity log unavailable: {exc})"
                 else:
                     reset_message = "Reset cancelled; no changes requested."
                 previous_selected = None
@@ -222,6 +323,7 @@ def run(stdscr) -> None:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
                     )
                     router_probe = executor.submit(router_intelligence.inspect_and_probe_gateway)
             elif key in (ord("s"), ord("S")) and label == "Wi-Fi Intelligence":
@@ -230,11 +332,56 @@ def run(stdscr) -> None:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
                     )
                     wifi_scan = executor.submit(
                         wifi_intelligence.scan_available_networks,
                         cancel_event=wifi_cancel,
                     )
+            elif key in (ord("p"), ord("P")) and label == "Network Diagnostics":
+                if diagnostic_task is None:
+                    diagnostic_message = "Pinging the configured default gateway..."
+                    diagnostic_task = executor.submit(diagnostics.ping_gateway)
+            elif key in (ord("t"), ord("T")) and label == "Network Diagnostics":
+                if diagnostic_task is None:
+                    diagnostic_message = "Tracing the route to the configured default gateway..."
+                    diagnostic_task = executor.submit(_trace_gateway)
+            elif key in (ord("d"), ord("D")) and label == "Network Diagnostics":
+                hostname = _prompt_text(stdscr, "Hostname for DNS lookup: ")
+                if hostname:
+                    diagnostic_message = f"Resolving {hostname}..."
+                    diagnostic_task = executor.submit(diagnostics.resolve_dns, hostname)
+            elif key in (ord("+"), ord("=")) and label == "Settings":
+                refresh_seconds = 5 if refresh_seconds == 0 else min(300, refresh_seconds + 5)
+                try:
+                    settings.update_setting("refresh_seconds", refresh_seconds)
+                    settings_message = f"Automatic refresh set to {refresh_seconds} seconds."
+                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
+                except Exception as exc:
+                    settings_message = f"Could not save refresh setting: {exc}"
+                previous_selected = None
+            elif key == ord("-") and label == "Settings":
+                refresh_seconds = max(0, refresh_seconds - 5)
+                try:
+                    settings.update_setting("refresh_seconds", refresh_seconds)
+                    settings_message = (
+                        "Automatic refresh disabled."
+                        if refresh_seconds == 0
+                        else f"Automatic refresh set to {refresh_seconds} seconds."
+                    )
+                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
+                except Exception as exc:
+                    settings_message = f"Could not save refresh setting: {exc}"
+                previous_selected = None
+            elif key == ord("0") and label == "Settings":
+                refresh_seconds = 0
+                try:
+                    settings.update_setting("refresh_seconds", 0)
+                    settings_message = "Automatic refresh disabled."
+                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
+                except Exception as exc:
+                    settings_message = f"Could not save refresh setting: {exc}"
+                previous_selected = None
     finally:
         wifi_cancel.set()
         executor.shutdown(wait=False, cancel_futures=True)
