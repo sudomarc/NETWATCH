@@ -1,0 +1,5 @@
+netwatch-ng (2.0.0~dev1-1) unstable; urgency=medium
+
+  * Initial Debian packaging for the NETWATCH NG development line.
+
+ -- NETWATCH NG maintainers <177128114+sudomarc@users.noreply.github.com>  Sat, 14 Nov 2026 10:55:00 -0500

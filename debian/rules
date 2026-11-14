@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+
+export PYBUILD_NAME=netwatch-ng
+export PYBUILD_SYSTEM=pyproject
+
+%:
+	dh $@ --buildsystem=pybuild --with python3

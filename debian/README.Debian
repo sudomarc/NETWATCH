@@ -1,0 +1,18 @@
+NETWATCH NG Debian package
+==========================
+
+This is a development build of NETWATCH NG 2.x.
+
+Launch the terminal interface with:
+
+    netwatch-ng
+
+Some operations that modify firewall or traffic-control state require
+root privileges. Prefer running without root for read-only inspection;
+use a privileged session only when necessary.
+
+Optional tools are detected at runtime. Missing optional tools disable
+only the features that depend on them.
+
+Traffic rate limits currently use tc packet policing: packets above the
+configured rate are dropped. This is not smooth queue-based HTB shaping.

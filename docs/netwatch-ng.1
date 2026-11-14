@@ -1,0 +1,47 @@
+.TH NETWATCH-NG 1 "November 2026" "NETWATCH NG 2.x" "User Commands"
+.SH NAME
+netwatch-ng \- Linux network supervision and administration TUI
+.SH SYNOPSIS
+.B netwatch-ng
+.SH DESCRIPTION
+.B netwatch-ng
+starts the NETWATCH NG terminal user interface for Linux network
+discovery, device identification, gateway inspection, Wi-Fi inventory,
+and management of NETWATCH-owned firewall and traffic rules.
+.PP
+The interface is keyboard-driven and can be used in a local terminal or
+over SSH. It does not start a graphical desktop application.
+.SH PRIVILEGES
+Read-only inspection should normally be performed as an unprivileged user.
+Operations that change firewall or traffic-control state require root
+privileges. Start the application from a privileged terminal only when
+those operations are needed.
+.SH OPTIONAL TOOLS
+NETWATCH NG detects optional system tools at runtime. Depending on the
+feature, these may include nmap, iw, rfkill, iptables, nft, tcpdump,
+aircrack-ng, avahi-browse, snmpwalk, ethtool, mtr, and iperf3.
+Missing optional tools are reported by the application.
+.SH TRAFFIC LIMITS
+The current traffic manager uses tc clsact packet policing. Packets
+exceeding the selected rate are dropped. This is not smooth queue-based
+HTB shaping. NETWATCH NG does not replace an interface's root qdisc.
+.SH SAFETY
+Firewall and traffic-control operations are limited to resources that
+NETWATCH NG can identify as its own. Do not use network-control features
+on systems or networks without authorization.
+.SH FILES
+.TP
+.I /etc/netwatch-ng/
+System configuration directory.
+.TP
+.I /var/lib/netwatch-ng/traffic-state.json
+Protected state used to identify NETWATCH-owned traffic filters.
+.TP
+.I ~/.config/netwatch-ng/
+Per-user configuration directory for unprivileged operations.
+.SH SEE ALSO
+.BR ip (8),
+.BR tc (8),
+.BR nmap (1)
+.SH AUTHOR
+NETWATCH NG maintainers
