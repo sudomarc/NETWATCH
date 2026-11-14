@@ -44,7 +44,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates build-essential dpkg-dev debhelper dh-python \
             pybuild-plugin-pyproject python3-all python3-setuptools \
-            python3-pytest iproute2
+            python3-pytest iproute2 util-linux
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,6 +67,7 @@ jobs:
           test -x "$(command -v netwatch-ng)"
           python3 -c "import netwatch_ng"
           dpkg-query -W netwatch-ng
+          printf 'q' | script -q -e -c 'TERM=xterm-256color netwatch-ng' /dev/null
           apt-get remove -y netwatch-ng
 
       - name: Upload Debian package

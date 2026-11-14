@@ -32,18 +32,21 @@ Current NG capabilities:
   It is not smooth queue-based HTB shaping. The root qdisc is not replaced.
 - Reset Manager read-only preview and explicit confirmation before reset.
 - Diagnostics for gateway ping, DNS lookup and route trace.
-- Persisted settings (the TUI currently exposes automatic refresh controls)
-  and a bounded JSONL activity log.
+- Persisted Settings for automatic refresh, Nmap timeout, preferred Wi-Fi
+  interface and terminal color mode, plus a bounded JSONL activity log.
+- Device inventory export to JSON/CSV and router read-only UPnP/SSDP lookup.
 
 Optional tools are detected at runtime. Capabilities that depend on missing
 tools are reported as unavailable. OUI matches and advertised Wi-Fi security
 are hints, not verified device/model/security claims.
 
-Not implemented in NG yet: SNMP router discovery and a full vendor/model/firmware fingerprinting stack,
-Aircrack-ng audit workflows, detailed packet analysis, rich device detail
-views, complete Settings controls, APT repository publication, and a stable
-2.0.0 release. The legacy 1.x capability table below describes the Bash
-toolkit, not the Python rewrite.
+Not implemented in NG yet: SNMP router discovery and a full vendor/model/firmware
+fingerprinting stack, Aircrack-ng audit workflows, detailed packet analysis,
+rich device detail/search/filter views, broader advanced Settings controls,
+and a public APT repository deployment. The signed APT publication workflow
+and owner setup guide are prepared in [docs/apt-repository.md](docs/apt-repository.md).
+There is no stable 2.0.0 release yet. The legacy 1.x capability table below
+describes the Bash toolkit, not the Python rewrite.
 
 ## Current version
 
