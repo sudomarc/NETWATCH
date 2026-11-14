@@ -123,6 +123,14 @@ def _scan_wifi(cancel_event: Event):
     return wifi_intelligence.scan_available_networks(cancel_event=cancel_event)
 
 
+def _log_warning(module: str, action: str, status: str, detail: str) -> str:
+    try:
+        activity_log.record_event(module, action, status, detail)
+    except Exception as exc:
+        return f" (operation completed; activity log unavailable: {exc})"
+    return ""
+
+
 def _save_setting_value(key: str, value, description: str) -> tuple[bool, str]:
     try:
         settings.update_setting(key, value)
@@ -313,13 +321,14 @@ def run(stdscr) -> None:
                             base_devices + [device_intelligence.from_nmap_host(scanned_host)]
                         )
                         device_message = f"Service/version scan completed: {scanned_host.ip}."
-                    activity_log.record_event("Devices", "service_scan", "success", device_message)
                 except Exception as exc:
                     device_message = f"Service/version scan failed: {exc}"
                     try:
                         activity_log.record_event("Devices", "service_scan", "error", str(exc))
                     except Exception:
                         pass
+                else:
+                    device_message += _log_warning("Devices", "service_scan", "success", device_message)
                 service_scan = None
                 if label == "Devices":
                     lines = _screen_lines(
@@ -333,13 +342,14 @@ def run(stdscr) -> None:
                 try:
                     device_result = device_scan.result()
                     device_message = f"Active Nmap discovery completed: {len(device_result)} device(s)."
-                    activity_log.record_event("Devices", "active_scan", "success", device_message)
                 except Exception as exc:
                     device_message = f"Active Nmap discovery failed: {exc}"
                     try:
                         activity_log.record_event("Devices", "active_scan", "error", str(exc))
                     except Exception:
                         pass
+                else:
+                    device_message += _log_warning("Devices", "active_scan", "success", device_message)
                 device_scan = None
                 if label == "Devices":
                     lines = _screen_lines(
@@ -465,16 +475,20 @@ def run(stdscr) -> None:
                         )
                         export_dir = get_config_dir() / "exports"
                         export_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-                        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
                         path = export_dir / f"devices-{stamp}.{format_name}"
                         content = (
                             device_export.to_json(current_devices)
                             if format_name == "json"
                             else device_export.to_csv(current_devices)
                         )
-                        path.write_text(content, encoding="utf-8")
+                        with path.open("x", encoding="utf-8") as stream:
+                            stream.write(content)
                         device_message = f"Exported {len(current_devices)} device(s): {path}"
-                        activity_log.record_event("Devices", "export", "success", f"{format_name}: {len(current_devices)} devices")
+                        device_message += _log_warning(
+                            "Devices", "export", "success",
+                            f"{format_name}: {len(current_devices)} devices",
+                        )
                     except Exception as exc:
                         device_message = f"Device export failed: {exc}"
                     previous_selected = None
@@ -511,7 +525,7 @@ def run(stdscr) -> None:
                         try:
                             changed = firewall.block_ip(target, family=family) if action == "block" else firewall.unblock_ip(target, family=family)
                             firewall_message = f"{action.capitalize()} {'applied' if changed else 'already in requested state'}: {target}"
-                            activity_log.record_event("Firewall", action, "success", target)
+                            firewall_message += _log_warning("Firewall", action, "success", target)
                         except Exception as exc:
                             firewall_message = f"{action.capitalize()} failed for {target}: {exc}"
                             try:
@@ -533,7 +547,7 @@ def run(stdscr) -> None:
                             f"{limit.direction} packet policing set on {limit.interface}: "
                             f"{limit.rate_kbps} kbit/s. Excess packets are dropped."
                         )
-                        activity_log.record_event("Traffic", "set_limit", "success", traffic_message)
+                        traffic_message += _log_warning("Traffic", "set_limit", "success", traffic_message)
                     except Exception as exc:
                         traffic_message = f"Could not set traffic limit: {exc}"
                         try:
@@ -556,7 +570,7 @@ def run(stdscr) -> None:
                             traffic_message = (
                                 f"{'Removed' if removed else 'No active NETWATCH rule'}: {interface} {direction}"
                             )
-                            activity_log.record_event("Traffic", "clear_limit", "success", traffic_message)
+                            traffic_message += _log_warning("Traffic", "clear_limit", "success", traffic_message)
                         except Exception as exc:
                             traffic_message = f"Could not clear traffic limit: {exc}"
                             try:
