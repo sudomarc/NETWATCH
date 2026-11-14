@@ -8,6 +8,7 @@ from threading import Event
 
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
+from netwatch_ng.tui.screens.firewall import build_firewall_lines
 from netwatch_ng.tui.screens.router_intelligence import build_router_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 from netwatch_ng.tui.screens.wifi_intelligence import build_wifi_lines
@@ -21,7 +22,7 @@ MENU: list[tuple[str, str]] = [
     ("Devices", IMPLEMENTED),
     ("Router Intelligence", IMPLEMENTED),
     ("Wi-Fi Intelligence", IMPLEMENTED),
-    ("Firewall", PLANNED),
+    ("Firewall", IMPLEMENTED),
     ("Traffic Manager", PLANNED),
     ("Network Diagnostics", PLANNED),
     ("System Manager", IMPLEMENTED),
@@ -35,8 +36,9 @@ def _about_lines() -> list[str]:
     return [
         "NETWATCH NG — Linux network supervision/administration TUI",
         "Implemented: network engine, device discovery and identification,",
-        "router gateway intelligence, Wi-Fi inventory and AP survey.",
-        "Still planned: firewall, traffic shaping, diagnostics and settings.",
+        "router gateway intelligence, Wi-Fi inventory and AP survey,",
+        "and rule-based firewall block management.",
+        "Still planned: traffic shaping, diagnostics and settings.",
         "Repository: github.com/sudomarc/NETWATCH",
     ]
 
@@ -67,6 +69,8 @@ def _screen_lines(
     if label == "Wi-Fi Intelligence":
         interface, access_points = wifi_result if wifi_result is not None else (None, None)
         return build_wifi_lines(access_points, interface, wifi_message)
+    if label == "Firewall":
+        return build_firewall_lines()
     if label == "System Manager":
         return build_system_manager_lines()
     if label == "About":

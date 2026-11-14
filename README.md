@@ -10,20 +10,21 @@ Its TUI is available from a source checkout with `python -m netwatch_ng`.
 
 Implemented NG areas include interface/gateway inspection, passive and
 Nmap-based device discovery, evidence-based device identification, router
-gateway intelligence, and Wi-Fi inventory/surveys. Router Intelligence
-uses the local default route and neighbor table; its optional `p` check
-tests only common TCP management ports on that gateway. Wi-Fi Intelligence
-lists local radios and their supported modes, and runs an access-point
-survey only when requested with `s`. Both screens are reachable in the
-TUI; `r` refreshes the current screen. Scans may require Linux privileges
-and optional tools such as `iw` or `rfkill`. OUI matches and advertised
-Wi-Fi security are hints, not verified device/model/security claims.
-SNMP/UPnP router discovery, model/firmware fingerprinting, and Wi-Fi
-client capture or Aircrack-ng actions are not implemented.
-
-Firewall, traffic shaping, diagnostics, Debian packaging, and APT
-distribution are not yet implemented in NETWATCH NG. The legacy 1.x
-capability table below describes the Bash toolkit, not the Python rewrite.
+gateway intelligence, Wi‑Fi inventory/surveys, and rule-based firewall
+block management. Router Intelligence uses the local default route and
+neighbor table; its optional `p` check tests only common TCP management
+ports on that gateway. Wi‑Fi Intelligence lists local radios and their
+supported modes, and runs an access-point survey only when requested with
+`s`. Firewall Manager inspects NETWATCH-owned iptables/ip6tables rules and
+adds/removes single-IP block rules while refusing to touch the default
+gateway or malformed targets. Both screens are reachable in the TUI; `r`
+refreshes the current screen. Scans may require Linux privileges and
+optional tools such as `iw` or `rfkill`. OUI matches and advertised Wi‑Fi
+security are hints, not verified device/model/security claims.
+SNMP/UPnP router discovery, model/firmware fingerprinting, traffic
+shaping, Wi‑Fi client capture, Aircrack-ng actions, and Debian/APT
+distribution are not implemented yet. The legacy 1.x capability table
+below describes the Bash toolkit, not the Python rewrite.
 
 ## Current version
 
