@@ -9,6 +9,7 @@ from threading import Event
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.firewall import build_firewall_lines
+from netwatch_ng.tui.screens.reset_manager import build_reset_lines
 from netwatch_ng.tui.screens.router_intelligence import build_router_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 from netwatch_ng.tui.screens.traffic_manager import build_traffic_lines
@@ -25,6 +26,7 @@ MENU: list[tuple[str, str]] = [
     ("Wi-Fi Intelligence", IMPLEMENTED),
     ("Firewall", IMPLEMENTED),
     ("Traffic Manager", IMPLEMENTED),
+    ("Reset Manager", IMPLEMENTED),
     ("Network Diagnostics", PLANNED),
     ("System Manager", IMPLEMENTED),
     ("Settings", PLANNED),
@@ -74,6 +76,8 @@ def _screen_lines(
         return build_firewall_lines()
     if label == "Traffic Manager":
         return build_traffic_lines()
+    if label == "Reset Manager":
+        return build_reset_lines()
     if label == "System Manager":
         return build_system_manager_lines()
     if label == "About":
