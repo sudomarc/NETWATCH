@@ -46,9 +46,15 @@ def _validate_targets(targets: str) -> None:
     obvious shell-metacharacter injection surface. nmap itself still
     validates/rejects malformed targets.
     """
-    forbidden = set(";|&`$(){}<>\n")
-    if any(c in forbidden for c in targets):
-        raise InvalidTarget(f"target contains forbidden characters: {targets!r}")
+    forbidden = set(";|&\`$(){}<>\n")
+    if (
+        not isinstance(targets, str)
+        or not targets
+        or targets.startswith("-")
+        or any(c.isspace() for c in targets)
+        or any(c in forbidden for c in targets)
+    ):
+        raise InvalidTarget(f"invalid Nmap target expression: {targets!r}")
 
 
 def _parse_host(host_elem: ET.Element) -> NmapHost | None:

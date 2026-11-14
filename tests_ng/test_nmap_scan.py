@@ -84,3 +84,14 @@ def test_service_scan_returns_none_on_empty_result(monkeypatch):
 def test_empty_xml_returns_empty_list(monkeypatch):
     monkeypatch.setattr(nmap_scan, "run", _fake_run_factory(""))
     assert nmap_scan.discovery_scan("192.168.1.0/24") == []
+
+
+@pytest.mark.parametrize("target", ["--script=default", "-iR", "192.0.2.1;id", "bad host"])
+def test_discovery_scan_rejects_option_injection_and_malformed_targets(monkeypatch, target):
+    monkeypatch.setattr(
+        nmap_scan,
+        "run",
+        lambda *args, **kwargs: pytest.fail("invalid target must not invoke nmap"),
+    )
+    with pytest.raises(nmap_scan.InvalidTarget):
+        nmap_scan.discovery_scan(target)

@@ -257,17 +257,29 @@ def set_limit(
     if not _looks_like_our_filter(verified, pref, rate_kbps):
         raise RuntimeError(f"tc reported success but the NETWATCH filter could not be verified on {interface}")
 
+    previous_rate = existing.get("rate_kbps") if isinstance(existing, dict) else None
     state["limits"][key] = {"rate_kbps": rate_kbps, "pref": pref}
     try:
         _write_state(state)
     except Exception as exc:
-        cleanup = run(
-            ["tc", "filter", "del", "dev", interface, direction, "protocol", "all", "pref", str(pref)],
-            timeout=5.0,
-        )
-        detail = "state write failed"
-        if not cleanup.ok:
-            detail += "; filter cleanup also failed"
+        if isinstance(previous_rate, int) and previous_rate > 0 and present:
+            rollback = run(
+                _filter_argv(interface, direction, previous_rate, replace=True),
+                timeout=5.0,
+            )
+            detail = (
+                "state write failed; previous rate restored"
+                if rollback.ok
+                else "state write failed; previous rate rollback also failed"
+            )
+        else:
+            cleanup = run(
+                ["tc", "filter", "del", "dev", interface, direction, "protocol", "all", "pref", str(pref)],
+                timeout=5.0,
+            )
+            detail = "state write failed"
+            if not cleanup.ok:
+                detail += "; filter cleanup also failed"
         raise RuntimeError(f"{detail}: {exc}") from exc
     return TrafficLimit(interface, direction, rate_kbps, f"pref-{pref}")
 
