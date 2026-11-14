@@ -392,7 +392,11 @@ def run(stdscr) -> None:
                             diagnostic_result, diagnostic_message, settings_message,
                             firewall_message, traffic_message, device_result, device_message,
                         )
-                        device_scan = executor.submit(\n                            devices_mod.active_scan, target,\n                            timeout=settings.load_settings()["scan_timeout_seconds"],\n                            cancel_event=device_cancel,\n                        )
+                        device_scan = executor.submit(
+                            devices_mod.active_scan, target,
+                            timeout=settings.load_settings()["scan_timeout_seconds"],
+                            cancel_event=device_cancel,
+                        )
             elif key in (ord("b"), ord("B"), ord("u"), ord("U")) and label == "Firewall":
                 target = _prompt_text(stdscr, "IPv4/IPv6 address: ", 64)
                 if target:
