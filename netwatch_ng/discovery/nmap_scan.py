@@ -134,7 +134,11 @@ def discovery_scan(
     return _parse_nmap_xml(result.stdout)
 
 
-def service_scan(target: str, timeout: float = 120.0) -> NmapHost | None:
+def service_scan(
+    target: str,
+    timeout: float = 120.0,
+    cancel_event: Event | None = None,
+) -> NmapHost | None:
     """Service/version detection (`nmap -sV`) against a single host.
 
     Only accepts a single IP/hostname (never a range) — this is the
@@ -151,7 +155,12 @@ def service_scan(target: str, timeout: float = 120.0) -> NmapHost | None:
     if "/" in target and not is_single_ip:
         raise InvalidTarget("service_scan accepts a single host, not a CIDR range")
 
-    result = run(["nmap", "-sV", "-oX", "-", target], timeout=timeout)
+    argv = ["nmap", "-sV", "-oX", "-", target]
+    result = (
+        run(argv, timeout=timeout)
+        if cancel_event is None
+        else run_cancellable(argv, timeout=timeout, cancel_event=cancel_event)
+    )
     if not result.ok:
         raise RuntimeError(f"nmap service scan failed: {result.stderr.strip()}")
     hosts = _parse_nmap_xml(result.stdout)

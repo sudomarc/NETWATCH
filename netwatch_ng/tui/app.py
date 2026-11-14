@@ -426,6 +426,7 @@ def run(stdscr) -> None:
                         nmap_scan.service_scan,
                         target,
                         timeout=settings.load_settings()["scan_timeout_seconds"],
+                        cancel_event=device_cancel,
                     )
             elif key in (ord("e"), ord("E")) and label == "Devices":
                 format_name = _prompt_text(stdscr, "Export format (json/csv): ", 4).lower()
