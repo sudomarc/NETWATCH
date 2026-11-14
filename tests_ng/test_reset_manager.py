@@ -1,43 +1,48 @@
 from __future__ import annotations
 
-import pytest
-
 from netwatch_ng import firewall, reset_manager, traffic
+from netwatch_ng.tui.screens import reset_manager as reset_screen
 
 
-def test_reset_firewall_removes_only_netwatch_rules(monkeypatch):
+def test_preview_reset_is_read_only(monkeypatch):
+    rules = [firewall.FirewallRule("inet", "FORWARD", "192.168.1.50", "DROP", "NETWATCH")]
+    limits = [traffic.TrafficLimit("eth0", "egress", 512, "pref-49152")]
+    monkeypatch.setattr(firewall, "list_netwatch_rules", lambda family: rules if family == "inet" else [])
+    monkeypatch.setattr(traffic, "list_limits", lambda interface=None: limits)
+    monkeypatch.setattr(
+        firewall, "unblock_ip",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("preview mutated firewall")),
+    )
+    monkeypatch.setattr(
+        traffic, "clear_limit",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("preview mutated traffic")),
+    )
+    report = reset_manager.preview_all()
+    assert [item.target for item in report.firewall_actions] == ["inet:192.168.1.50"]
+    assert [item.target for item in report.traffic_actions] == ["eth0:egress"]
+
+
+def test_reset_screen_never_calls_destructive_reset(monkeypatch):
+    monkeypatch.setattr(reset_manager, "preview_all", lambda: reset_manager.ResetReport([], []))
+    monkeypatch.setattr(
+        reset_manager, "reset_all",
+        lambda: (_ for _ in ()).throw(AssertionError("screen triggered reset")),
+    )
+    lines = reset_screen.build_reset_lines()
+    assert any("Read-only preview" in line for line in lines)
+
+
+def test_reset_firewall_does_not_delete_other_chains(monkeypatch):
     rules = [
         firewall.FirewallRule("inet", "FORWARD", "192.168.1.50", "DROP", "NETWATCH"),
-        firewall.FirewallRule("inet", "OUTPUT", "8.8.8.8", "ACCEPT", None),
+        firewall.FirewallRule("inet", "OUTPUT", "192.168.1.60", "DROP", "NETWATCH"),
     ]
     monkeypatch.setattr(firewall, "list_netwatch_rules", lambda family: rules if family == "inet" else [])
     seen = []
-
-    def fake_unblock(target, family="inet", dry_run=False):
-        seen.append((target, family, dry_run))
-        return True
-
-    monkeypatch.setattr(firewall, "unblock_ip", fake_unblock)
+    monkeypatch.setattr(firewall, "unblock_ip", lambda target, family="inet", dry_run=False: seen.append(target) or True)
     actions = reset_manager.reset_firewall()
-    assert len(actions) == 1
-    assert actions[0].target == "inet:192.168.1.50"
-    assert seen == [("192.168.1.50", "inet", False)]
-
-
-def test_reset_traffic_clears_netwatch_qdiscs(monkeypatch):
-    limits = [traffic.TrafficLimit("eth0", "egress", 512, "1:")]
-    monkeypatch.setattr(traffic, "list_limits", lambda interface=None: limits)
-    seen = []
-
-    def fake_clear(interface, dry_run=False):
-        seen.append((interface, dry_run))
-        return True
-
-    monkeypatch.setattr(traffic, "clear_limit", fake_clear)
-    actions = reset_manager.reset_traffic()
-    assert len(actions) == 1
-    assert actions[0].target == "eth0"
-    assert seen == [("eth0", False)]
+    assert [action.target for action in actions] == ["inet:192.168.1.50"]
+    assert seen == ["192.168.1.50"]
 
 
 def test_reset_all_combines_firewall_and_traffic(monkeypatch):

@@ -1,23 +1,29 @@
-"""Reset Manager screen: show what NETWATCH can safely clear."""
-
+"""Read-only Reset Manager preview screen."""
 from __future__ import annotations
 
-from netwatch_ng.reset_manager import reset_all
+from netwatch_ng.reset_manager import preview_all
 
 
-def build_reset_lines() -> list[str]:
-    report = reset_all()
-    lines = ["Reset Manager"]
-    if not report.firewall_actions and not report.traffic_actions:
-        lines.extend([
-            "No NETWATCH-managed firewall rules or tc limits remain to reset.",
-            "This safely preserves unrelated system rules and qdiscs.",
-        ])
-        return lines
-
-    lines.append("Operations that would be removed only if NETWATCH created them:")
-    for action in report.firewall_actions:
-        lines.append(f"  firewall: {action.target} -> {'ok' if action.success else 'failed'}")
-    for action in report.traffic_actions:
-        lines.append(f"  traffic: {action.target} -> {'ok' if action.success else 'failed'}")
+def build_reset_lines(message: str | None = None) -> list[str]:
+    """Render a read-only preview; mutations require an explicit TUI action."""
+    report = preview_all()
+    lines = ["Reset Manager", "Read-only preview — no changes have been made."]
+    total = len(report.firewall_actions) + len(report.traffic_actions)
+    if total == 0:
+        lines.append("No NETWATCH-owned firewall rules or traffic limits were detected.")
+    else:
+        lines.append(f"Resources/actions found: {total}")
+        for action in report.firewall_actions:
+            if action.target == "unavailable":
+                lines.append(f"  firewall preview unavailable: {action.detail}")
+            else:
+                lines.append(f"  firewall: {action.target} (requires confirmation)")
+        for action in report.traffic_actions:
+            if action.target == "unavailable":
+                lines.append(f"  traffic preview unavailable: {action.detail}")
+            else:
+                lines.append(f"  traffic: {action.target} (requires confirmation)")
+    if message:
+        lines.extend(["", message])
+    lines.extend(["", "Press x to review and confirm a reset."])
     return lines

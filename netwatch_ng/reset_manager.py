@@ -1,10 +1,4 @@
-"""Reset support for NETWATCH-managed firewall and egress traffic rules.
-
-This module intentionally removes only data created by NETWATCH: rules that
-carry the NETWATCH comment and tc qdiscs that are known to be managed by
-NETWATCH. It never clears unrelated firewall rules or global traffic shaping.
-"""
-
+"""Preview and execute removal of NETWATCH-owned firewall and traffic rules."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,64 +20,80 @@ class ResetReport:
     traffic_actions: list[ResetAction]
 
 
+def preview_all() -> ResetReport:
+    """Read-only preview. It never issues firewall or traffic mutations."""
+    firewall_actions: list[ResetAction] = []
+    traffic_actions: list[ResetAction] = []
+    for family in ("inet", "inet6"):
+        try:
+            rules = firewall.list_netwatch_rules(family)
+        except Exception as exc:
+            firewall_actions.append(ResetAction("firewall", "unavailable", False, str(exc)))
+            continue
+        for rule in rules:
+            if rule.chain != "FORWARD" or rule.source is None or rule.comment != firewall.NETWATCH_COMMENT:
+                continue
+            firewall_actions.append(
+                ResetAction("firewall", f"{family}:{rule.source}", False, "pending confirmation")
+            )
+    try:
+        limits = traffic.list_limits()
+        for limit in limits:
+            traffic_actions.append(
+                ResetAction("traffic", f"{limit.interface}:{limit.direction}", False, "pending confirmation")
+            )
+    except Exception as exc:
+        traffic_actions.append(ResetAction("traffic", "unavailable", False, str(exc)))
+    return ResetReport(firewall_actions, traffic_actions)
+
+
 def reset_firewall() -> list[ResetAction]:
-    """Delete only NETWATCH-owned firewall rules."""
+    """Delete only NETWATCH-owned FORWARD rules supported by the firewall API."""
     actions: list[ResetAction] = []
     for family in ("inet", "inet6"):
         for rule in firewall.list_netwatch_rules(family):
-            if rule.source is None or rule.comment != firewall.NETWATCH_COMMENT:
+            # unblock_ip() removes only from FORWARD. Never try to delete a
+            # rule discovered in another chain through that API.
+            if rule.chain != "FORWARD" or rule.source is None or rule.comment != firewall.NETWATCH_COMMENT:
                 continue
             try:
                 ok = firewall.unblock_ip(rule.source, family=family)
                 actions.append(
                     ResetAction(
-                        kind="firewall",
-                        target=f"{family}:{rule.source}",
-                        success=ok,
-                        detail=f"rule on {rule.chain}",
+                        "firewall", f"{family}:{rule.source}", ok,
+                        "removed" if ok else "rule already absent",
                     )
                 )
-            except Exception as exc:  # pragma: no cover - surfaced as a failed action
-                actions.append(
-                    ResetAction(
-                        kind="firewall",
-                        target=f"{family}:{rule.source}",
-                        success=False,
-                        detail=str(exc),
-                    )
-                )
+            except Exception as exc:
+                actions.append(ResetAction("firewall", f"{family}:{rule.source}", False, str(exc)))
     return actions
 
 
 def reset_traffic() -> list[ResetAction]:
-    """Delete only NETWATCH-managed egress tc qdiscs."""
+    """Delete only traffic filters verified against NETWATCH's protected state."""
     actions: list[ResetAction] = []
     for limit in traffic.list_limits():
         try:
-            ok = traffic.clear_limit(limit.interface)
+            ok = traffic.clear_limit(limit.interface, direction=limit.direction)
             actions.append(
                 ResetAction(
-                    kind="traffic",
-                    target=limit.interface,
-                    success=ok,
-                    detail=f"{limit.direction} limit",
+                    "traffic", f"{limit.interface}:{limit.direction}", ok,
+                    "removed" if ok else "rule already absent",
                 )
             )
-        except Exception as exc:  # pragma: no cover - surfaced as a failed action
-            actions.append(
-                ResetAction(
-                    kind="traffic",
-                    target=limit.interface,
-                    success=False,
-                    detail=str(exc),
-                )
-            )
+        except Exception as exc:
+            actions.append(ResetAction("traffic", f"{limit.interface}:{limit.direction}", False, str(exc)))
     return actions
 
 
 def reset_all() -> ResetReport:
-    """Remove only NETWATCH-managed firewall and traffic state."""
-    return ResetReport(
-        firewall_actions=reset_firewall(),
-        traffic_actions=reset_traffic(),
-    )
+    """Execute reset. The TUI must call this only after explicit confirmation."""
+    try:
+        firewall_actions = reset_firewall()
+    except Exception as exc:
+        firewall_actions = [ResetAction("firewall", "unavailable", False, str(exc))]
+    try:
+        traffic_actions = reset_traffic()
+    except Exception as exc:
+        traffic_actions = [ResetAction("traffic", "unavailable", False, str(exc))]
+    return ResetReport(firewall_actions, traffic_actions)
