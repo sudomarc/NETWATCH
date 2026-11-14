@@ -21,8 +21,10 @@ def build_diagnostics_lines(
         lines.append(f"Default gateway: {route.gateway or 'unknown'} via {route.device or 'unknown'}")
     dns = network.get_dns_servers()
     lines.append(f"Configured DNS: {', '.join(dns) if dns else 'not found in resolv.conf'}")
-    lines.extend(["", "Press p to ping the default gateway."])
-    lines.append("Use the diagnostics module API for hostname DNS lookup and route tracing.")
+    lines.extend([
+        "",
+        "Keys: p ping the default gateway; t trace a route to a host/IP; d look up DNS for a hostname.",
+    ])
     if result is not None:
         lines.extend(["", f"{result.name}: {result.summary}"])
         if result.details:

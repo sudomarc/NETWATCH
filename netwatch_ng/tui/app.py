@@ -70,18 +70,6 @@ def _discover_upnp_gateway():
     return report.gateway, upnp.discover_upnp(report.gateway)
 
 
-def _trace_gateway():
-    route = (
-        router_intelligence.network.get_default_gateway("inet")
-        or router_intelligence.network.get_default_gateway("inet6")
-    )
-    if route is None or route.gateway is None:
-        return diagnostics.DiagnosticResult(
-            "Traceroute", False, "No default gateway is configured"
-        )
-    return diagnostics.trace_route(route.gateway)
-
-
 def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
     height, width = stdscr.getmaxyx()
     stdscr.move(height - 1, 0)
@@ -664,8 +652,10 @@ def run(stdscr) -> None:
                     diagnostic_task = executor.submit(diagnostics.ping_gateway)
             elif key in (ord("t"), ord("T")) and label == "Network Diagnostics":
                 if diagnostic_task is None:
-                    diagnostic_message = "Tracing the route to the configured default gateway..."
-                    diagnostic_task = executor.submit(_trace_gateway)
+                    target = _prompt_text(stdscr, "Trace route to host/IP: ")
+                    if target:
+                        diagnostic_message = f"Tracing route to {target}..."
+                        diagnostic_task = executor.submit(diagnostics.trace_route, target)
             elif key in (ord("d"), ord("D")) and label == "Network Diagnostics":
                 hostname = _prompt_text(stdscr, "Hostname for DNS lookup: ")
                 if hostname:
