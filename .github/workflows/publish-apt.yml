@@ -1,0 +1,109 @@
+name: Publish signed NETWATCH NG APT repository
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'v2.')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Install Debian build and repository tools
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev debhelper dh-python devscripts \
+            pybuild-plugin-pyproject python3-all python3-setuptools \
+            python3-pytest iproute2 apt-utils gnupg ca-certificates
+
+      - name: Validate release metadata and tests
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          DEBFULLNAME: NETWATCH NG maintainers
+          DEBEMAIL: 177128114+sudomarc@users.noreply.github.com
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          case "$VERSION" in
+            2.*) ;;
+            *) echo "Refusing to publish non-2.x tag: $RELEASE_TAG"; exit 1 ;;
+          esac
+          dch --newversion "${VERSION}-1" --distribution stable \
+            --force-distribution "NETWATCH NG ${VERSION} release."
+          python3 -m py_compile $(find netwatch_ng -name "*.py")
+          python3 -m pytest tests_ng -q
+
+      - name: Build Debian package
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p public/pool/main
+          cp ../netwatch-ng_*.deb public/pool/main/
+          dpkg-deb --info public/pool/main/netwatch-ng_*.deb
+
+      - name: Import archive signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+        run: |
+          test -n "$APT_GPG_PRIVATE_KEY" || { echo "Missing APT_GPG_PRIVATE_KEY secret"; exit 1; }
+          test -n "$APT_GPG_KEY_ID" || { echo "Missing APT_GPG_KEY_ID secret"; exit 1; }
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys "$APT_GPG_KEY_ID"
+
+      - name: Generate APT indexes and signatures
+        env:
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          mkdir -p public/dists/stable/main/binary-amd64
+          cd public
+          apt-ftparchive packages pool/main > dists/stable/main/binary-amd64/Packages
+          gzip -n -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+          cat > apt-release.conf <<'EOF'
+          APT::FTPArchive::Release::Origin "NETWATCH NG";
+          APT::FTPArchive::Release::Label "NETWATCH NG";
+          APT::FTPArchive::Release::Suite "stable";
+          APT::FTPArchive::Release::Codename "stable";
+          APT::FTPArchive::Release::Architectures "amd64";
+          APT::FTPArchive::Release::Components "main";
+          APT::FTPArchive::Release::Description "NETWATCH NG signed Debian repository";
+          EOF
+          apt-ftparchive -c=apt-release.conf release dists/stable > dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$APT_GPG_PASSPHRASE" --local-user "$APT_GPG_KEY_ID" \
+            --clearsign --output dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$APT_GPG_PASSPHRASE" --local-user "$APT_GPG_KEY_ID" \
+            --detach-sign --output dists/stable/Release.gpg dists/stable/Release
+          gpg --armor --export "$APT_GPG_KEY_ID" > public.key
+          test -s public.key
+          gpg --verify dists/stable/Release.gpg dists/stable/Release
+          gpg --verify dists/stable/InRelease
+          touch .nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy APT repository to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
