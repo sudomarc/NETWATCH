@@ -12,7 +12,8 @@ import ipaddress
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from netwatch_ng.core.shell import run
+from netwatch_ng.core.shell import run, run_cancellable
+from threading import Event
 
 
 class InvalidTarget(ValueError):
@@ -114,11 +115,20 @@ def _parse_nmap_xml(xml_text: str) -> list[NmapHost]:
     return hosts
 
 
-def discovery_scan(targets: str, timeout: float = 60.0) -> list[NmapHost]:
+def discovery_scan(
+    targets: str,
+    timeout: float = 60.0,
+    cancel_event: Event | None = None,
+) -> list[NmapHost]:
     """Ping-style host discovery (`nmap -sn`) across `targets`
     (an IP, hostname, CIDR, or nmap range expression)."""
     _validate_targets(targets)
-    result = run(["nmap", "-sn", "-oX", "-", targets], timeout=timeout)
+    argv = ["nmap", "-sn", "-oX", "-", targets]
+    result = (
+        run(argv, timeout=timeout)
+        if cancel_event is None
+        else run_cancellable(argv, timeout=timeout, cancel_event=cancel_event)
+    )
     if not result.ok:
         raise RuntimeError(f"nmap discovery scan failed: {result.stderr.strip()}")
     return _parse_nmap_xml(result.stdout)
