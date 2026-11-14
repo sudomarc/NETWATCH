@@ -1,6 +1,13 @@
-# Contributing to NETWATCH
+# Contributing to NETWATCH / NETWATCH NG
 
-NETWATCH is a Linux-only Bash project. Contributions should preserve a small, auditable implementation and should prefer correctness over feature count.
+NETWATCH is Linux-only. The 1.x line (`netwatch.sh`, `netwatch-ipv6.sh`,
+`netwatch-router.sh`, `ui/netwatch_tui.py`) is Bash plus a Python/curses
+TUI and stays on `main` as a stable reference implementation. **NETWATCH
+NG (2.x, under `netwatch_ng/`)** is a from-scratch Python 3 rewrite —
+see `docs/ADR-001-python-rewrite.md` for why the prior "no language
+rewrite" rule was superseded. Contributions to either line should
+preserve a small, auditable implementation and should prefer
+correctness over feature count.
 
 ## Engineering rules
 
@@ -12,9 +19,14 @@ Follow these priorities:
 4. maintainability;
 5. optimization only after verification.
 
-Do not rewrite NETWATCH in another language or add Windows, PowerShell, Android, or Termux implementations.
+Do not add Windows, PowerShell, Android, or Termux implementations.
 
-Never introduce `eval`, unsafe shell interpolation, silent error swallowing, or insecure SSH host-key handling.
+For NETWATCH NG (Python): never build a shell string from user input,
+never use `subprocess` with `shell=True`, never pass unsanitized input
+into a privileged command, never swallow an error silently, and never
+disable SSH host-key verification. For the legacy Bash line: never
+introduce `eval`, unsafe shell interpolation, silent error swallowing,
+or insecure SSH host-key handling.
 
 Never claim a capability is implemented unless the code and tests prove it.
 

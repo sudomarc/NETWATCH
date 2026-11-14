@@ -16,3 +16,12 @@ arp_*.pid
 Thumbs.db
 .vscode/
 .idea/
+
+# Python (netwatch_ng / NETWATCH NG)
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+*.deb
