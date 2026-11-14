@@ -38,7 +38,7 @@ def build_router_lines(
             else "  Manufacturer hint: unavailable (no local OUI match)"
         ),
         f"  Local interface addresses: {', '.join(report.local_addresses) or 'unavailable'}",
-        "  SNMP/UPnP discovery and model/firmware fingerprinting are not implemented.",
+        "  SNMP discovery is not implemented; press u for a read-only UPnP/SSDP check.",
         "",
     ]
     if services is None:

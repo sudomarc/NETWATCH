@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
 
-from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, wifi_intelligence
+from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, upnp, wifi_intelligence
 from netwatch_ng.discovery import device_intelligence, devices as devices_mod, export as device_export, nmap_scan
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
@@ -61,6 +61,13 @@ def _planned_lines(label: str) -> list[str]:
         "This module is scheduled in a later sprint and intentionally",
         "shows no simulated data or non-functional controls.",
     ]
+
+
+def _discover_upnp_gateway():
+    report = router_intelligence.inspect_default_gateway()
+    if report is None:
+        return None, []
+    return report.gateway, upnp.discover_upnp(report.gateway)
 
 
 def _trace_gateway():
@@ -203,6 +210,7 @@ def run(stdscr) -> None:
     executor = ThreadPoolExecutor(max_workers=2)
     router_probe: Future | None = None
     wifi_scan: Future | None = None
+    upnp_scan: Future | None = None
     diagnostic_task: Future | None = None
     device_scan: Future | None = None
     service_scan: Future | None = None
@@ -309,6 +317,44 @@ def run(stdscr) -> None:
                         diagnostic_result, diagnostic_message, settings_message,
                         firewall_message, traffic_message, device_result, device_message,
                     )
+            if upnp_scan is not None and upnp_scan.done():
+                try:
+                    gateway, discovered = upnp_scan.result()
+                    if not gateway:
+                        router_message = "UPnP discovery unavailable: no default gateway."
+                    elif not discovered:
+                        router_message = f"No UPnP/SSDP response received from gateway {gateway}."
+                    else:
+                        descriptions = []
+                        for device in discovered:
+                            model = " ".join(
+                                value for value in (
+                                    device.manufacturer, device.model_name, device.model_number
+                                ) if value
+                            ) or "model not reported"
+                            name = device.friendly_name or "unnamed UPnP device"
+                            descriptions.append(f"{name} — {model}")
+                        router_message = (
+                            f"UPnP/SSDP responses from {gateway}: " + "; ".join(descriptions)
+                        )
+                    router_message += _log_warning(
+                        "Router", "upnp_discovery", "success", router_message
+                    )
+                except Exception as exc:
+                    router_message = f"UPnP/SSDP discovery failed: {exc}"
+                    try:
+                        activity_log.record_event("Router", "upnp_discovery", "error", str(exc))
+                    except Exception:
+                        pass
+                upnp_scan = None
+                if label == "Router Intelligence":
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+
 
             if service_scan is not None and service_scan.done():
                 try:
@@ -391,7 +437,7 @@ def run(stdscr) -> None:
 
             footer = "Up/Down: navigate   r: refresh   q: quit"
             if label == "Router Intelligence":
-                footer = "Up/Down: navigate   p: probe gateway ports   r: refresh   q: quit"
+                footer = "Up/Down: navigate   p: probe TCP ports   u: UPnP scan   r: refresh   q: quit"
             elif label == "Wi-Fi Intelligence":
                 footer = "Up/Down: navigate   s: survey access points   r: refresh   q: quit"
             elif label == "Reset Manager":
@@ -590,6 +636,18 @@ def run(stdscr) -> None:
                         firewall_message, traffic_message, device_result, device_message,
                     )
                     router_probe = executor.submit(router_intelligence.inspect_and_probe_gateway)
+            elif key in (ord("u"), ord("U")) and label == "Router Intelligence":
+                if upnp_scan is None:
+                    router_message = "Sending a read-only UPnP/SSDP discovery request to the configured gateway..."
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+                    upnp_scan = executor.submit(
+                        _discover_upnp_gateway,
+                    )
             elif key in (ord("s"), ord("S")) and label == "Wi-Fi Intelligence":
                 if wifi_scan is None:
                     wifi_message = "Wi-Fi survey running..."
