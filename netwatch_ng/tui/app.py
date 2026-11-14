@@ -4,10 +4,12 @@ from __future__ import annotations
 import curses
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
 from threading import Event
 
 from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, wifi_intelligence
-from netwatch_ng.discovery import devices as devices_mod
+from netwatch_ng.discovery import device_intelligence, devices as devices_mod, export as device_export, nmap_scan
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
@@ -19,6 +21,7 @@ from netwatch_ng.tui.screens.settings import build_settings_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 from netwatch_ng.tui.screens.traffic_manager import build_traffic_lines
 from netwatch_ng.tui.screens.wifi_intelligence import build_wifi_lines
+from netwatch_ng.system.config import get_config_dir
 
 IMPLEMENTED = "implemented"
 PLANNED = "planned"
@@ -174,6 +177,7 @@ def run(stdscr) -> None:
     wifi_scan: Future | None = None
     diagnostic_task: Future | None = None
     device_scan: Future | None = None
+    service_scan: Future | None = None
     device_result = None
     device_message = None
     router_result = None
@@ -271,6 +275,33 @@ def run(stdscr) -> None:
                         firewall_message, traffic_message, device_result, device_message,
                     )
 
+            if service_scan is not None and service_scan.done():
+                try:
+                    scanned_host = service_scan.result()
+                    if scanned_host is None:
+                        device_message = "Nmap returned no service-scan result for that host."
+                    else:
+                        base_devices = device_result if device_result is not None else devices_mod.passive_scan("inet")
+                        device_result = device_intelligence.merge(
+                            base_devices + [device_intelligence.from_nmap_host(scanned_host)]
+                        )
+                        device_message = f"Service/version scan completed: {scanned_host.ip}."
+                    activity_log.record_event("Devices", "service_scan", "success", device_message)
+                except Exception as exc:
+                    device_message = f"Service/version scan failed: {exc}"
+                    try:
+                        activity_log.record_event("Devices", "service_scan", "error", str(exc))
+                    except Exception:
+                        pass
+                service_scan = None
+                if label == "Devices":
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+
             if device_scan is not None and device_scan.done():
                 try:
                     device_result = device_scan.result()
@@ -337,7 +368,7 @@ def run(stdscr) -> None:
             elif label == "Traffic Manager":
                 footer = "Traffic: l set limit, c clear limit, r refresh"
             elif label == "Devices":
-                footer = "Devices: n active Nmap scan, r refresh"
+                footer = "Devices: n discover, v service scan, e export, r refresh"
             stdscr.addstr(height - 1, 0, footer[: max(width - 1, 0)], curses.A_DIM)
             stdscr.refresh()
 
@@ -381,6 +412,47 @@ def run(stdscr) -> None:
                 else:
                     reset_message = "Reset cancelled; no changes requested."
                 previous_selected = None
+            elif key in (ord("v"), ord("V")) and label == "Devices":
+                target = _prompt_text(stdscr, "Single authorized host for Nmap service scan: ", 253)
+                if target and service_scan is None:
+                    device_message = f"Service/version scan running for {target}..."
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+                    service_scan = executor.submit(
+                        nmap_scan.service_scan,
+                        target,
+                        timeout=settings.load_settings()["scan_timeout_seconds"],
+                    )
+            elif key in (ord("e"), ord("E")) and label == "Devices":
+                format_name = _prompt_text(stdscr, "Export format (json/csv): ", 4).lower()
+                if format_name in ("json", "csv"):
+                    try:
+                        current_devices = (
+                            device_result if device_result is not None
+                            else devices_mod.passive_scan("inet")
+                        )
+                        export_dir = get_config_dir() / "exports"
+                        export_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+                        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                        path = export_dir / f"devices-{stamp}.{format_name}"
+                        content = (
+                            device_export.to_json(current_devices)
+                            if format_name == "json"
+                            else device_export.to_csv(current_devices)
+                        )
+                        path.write_text(content, encoding="utf-8")
+                        device_message = f"Exported {len(current_devices)} device(s): {path}"
+                        activity_log.record_event("Devices", "export", "success", f"{format_name}: {len(current_devices)} devices")
+                    except Exception as exc:
+                        device_message = f"Device export failed: {exc}"
+                    previous_selected = None
+                else:
+                    device_message = "Export cancelled; choose json or csv."
+                    previous_selected = None
             elif key in (ord("n"), ord("N")) and label == "Devices":
                 target = _prompt_text(stdscr, "Authorized target/subnet for Nmap discovery: ", 253)
                 if target:

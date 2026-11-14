@@ -1,12 +1,4 @@
-"""Devices screen.
-
-Sprint 2 scope: passive discovery only (kernel ARP/NDP neighbor table).
-Active nmap scans are available in netwatch_ng.discovery.devices.active_scan
-but are NOT run automatically here — an active scan touches the network
-and should be an explicit operator action, planned for the Settings/
-Devices action bar in a later TUI sprint. This screen says so rather
-than silently only doing half the job.
-"""
+"""Devices screen for passive inventory and operator-triggered Nmap scans."""
 
 from __future__ import annotations
 
@@ -35,7 +27,8 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
     mode = "active Nmap + neighbor discovery" if active_devices is not None else "passive ARP/NDP neighbor table"
     lines.append(f"Devices ({mode}): {len(display_devices)} found")
     if active_devices is None:
-        lines.append("Press n to run an explicit Nmap discovery scan.")
+        lines.append("n: active Nmap discovery   v: service/version scan for one host")
+        lines.append("e: export current inventory to JSON or CSV")
     lines.append("")
     if not found:
         lines.append("No live neighbor-table entries. Generate traffic (e.g. ping the")
