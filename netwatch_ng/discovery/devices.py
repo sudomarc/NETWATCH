@@ -17,7 +17,12 @@ def passive_scan(family: str = "inet") -> list[di.Device]:
     return di.merge([di.from_neighbor(n) for n in found])
 
 
-def active_scan(targets: str, family: str = "inet", timeout: float = 60.0) -> list[di.Device]:
+def active_scan(
+    targets: str,
+    family: str = "inet",
+    timeout: float = 60.0,
+    cancel_event=None,
+) -> list[di.Device]:
     """Combine neighbor-table + nmap ping-scan discovery over `targets`.
 
     Raises BinaryNotFound if nmap is not installed — callers should
@@ -27,6 +32,6 @@ def active_scan(targets: str, family: str = "inet", timeout: float = 60.0) -> li
         raise BinaryNotFound("nmap")
 
     passive_devices = [di.from_neighbor(n) for n in neighbors_mod.list_live_neighbors(family)]
-    nmap_hosts = nmap_scan.discovery_scan(targets, timeout=timeout)
+    nmap_hosts = nmap_scan.discovery_scan(targets, timeout=timeout, cancel_event=cancel_event)
     active_devices = [di.from_nmap_host(h) for h in nmap_hosts]
     return di.merge(passive_devices + active_devices)

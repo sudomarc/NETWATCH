@@ -1,0 +1,78 @@
+name: Debian package (NETWATCH NG)
+
+on:
+  pull_request:
+    paths:
+      - "netwatch_ng/**"
+      - "tests_ng/**"
+      - "pyproject.toml"
+      - "debian/**"
+      - "docs/netwatch-ng.1"
+      - ".github/workflows/package-ng.yml"
+  push:
+    branches: ["main", "fix/**"]
+    paths:
+      - "netwatch_ng/**"
+      - "tests_ng/**"
+      - "pyproject.toml"
+      - "debian/**"
+      - "docs/netwatch-ng.1"
+      - ".github/workflows/package-ng.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke-test (${{ matrix.distribution }})
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Debian 12 (Bookworm)
+            image: debian:bookworm-slim
+          - distribution: Debian 13 (Trixie)
+            image: debian:trixie-slim
+    steps:
+      - name: Install build and test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates build-essential dpkg-dev debhelper dh-python \
+            pybuild-plugin-pyproject python3-all python3-setuptools \
+            python3-pytest iproute2 util-linux
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run NETWATCH NG tests
+        run: |
+          python3 -m py_compile $(find netwatch_ng -name "*.py")
+          python3 -m pytest tests_ng -q
+
+      - name: Build Debian binary package
+        run: dpkg-buildpackage -us -uc -b
+
+      - name: Inspect and install package
+        run: |
+          mkdir -p dist
+          cp ../netwatch-ng_*.deb dist/
+          dpkg-deb --info dist/netwatch-ng_*.deb
+          apt-get install -y ./dist/netwatch-ng_*.deb
+          command -v netwatch-ng
+          test -x "$(command -v netwatch-ng)"
+          python3 -c "import netwatch_ng"
+          dpkg-query -W netwatch-ng
+          printf 'q' | script -q -e -c 'TERM=xterm-256color netwatch-ng' /dev/null
+          apt-get remove -y netwatch-ng
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: netwatch-ng-${{ matrix.distribution }}
+          path: dist/*.deb
+          if-no-files-found: error

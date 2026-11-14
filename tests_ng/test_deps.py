@@ -35,3 +35,16 @@ def test_missing_mandatory_only_flags_mandatory_deps(monkeypatch):
     missing = deps.missing_mandatory()
     assert mandatory_missing in missing
     assert optional_missing not in missing
+
+
+def test_registry_matches_runtime_dependencies_and_feature_status():
+    registry = {dependency.binary: dependency for dependency in deps.REGISTRY}
+
+    assert registry["ip"].mandatory is True
+    assert registry["nmap"].mandatory is False
+    assert "packet policing" in registry["tc"].purpose
+    assert {"ping", "getent", "mtr", "traceroute"} <= registry.keys()
+    assert not {
+        "nft", "tcpdump", "tshark", "snmpwalk", "avahi-browse",
+        "ethtool", "iperf3", "ssh", "aircrack-ng", "airodump-ng",
+    } & registry.keys()

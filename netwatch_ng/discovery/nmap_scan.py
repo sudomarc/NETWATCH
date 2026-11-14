@@ -12,7 +12,8 @@ import ipaddress
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from netwatch_ng.core.shell import run
+from netwatch_ng.core.shell import run, run_cancellable
+from threading import Event
 
 
 class InvalidTarget(ValueError):
@@ -47,8 +48,14 @@ def _validate_targets(targets: str) -> None:
     validates/rejects malformed targets.
     """
     forbidden = set(";|&`$(){}<>\n")
-    if any(c in forbidden for c in targets):
-        raise InvalidTarget(f"target contains forbidden characters: {targets!r}")
+    if (
+        not isinstance(targets, str)
+        or not targets
+        or targets.startswith("-")
+        or any(c.isspace() for c in targets)
+        or any(c in forbidden for c in targets)
+    ):
+        raise InvalidTarget(f"invalid Nmap target expression: {targets!r}")
 
 
 def _parse_host(host_elem: ET.Element) -> NmapHost | None:
@@ -108,17 +115,30 @@ def _parse_nmap_xml(xml_text: str) -> list[NmapHost]:
     return hosts
 
 
-def discovery_scan(targets: str, timeout: float = 60.0) -> list[NmapHost]:
+def discovery_scan(
+    targets: str,
+    timeout: float = 60.0,
+    cancel_event: Event | None = None,
+) -> list[NmapHost]:
     """Ping-style host discovery (`nmap -sn`) across `targets`
     (an IP, hostname, CIDR, or nmap range expression)."""
     _validate_targets(targets)
-    result = run(["nmap", "-sn", "-oX", "-", targets], timeout=timeout)
+    argv = ["nmap", "-sn", "-oX", "-", targets]
+    result = (
+        run(argv, timeout=timeout)
+        if cancel_event is None
+        else run_cancellable(argv, timeout=timeout, cancel_event=cancel_event)
+    )
     if not result.ok:
         raise RuntimeError(f"nmap discovery scan failed: {result.stderr.strip()}")
     return _parse_nmap_xml(result.stdout)
 
 
-def service_scan(target: str, timeout: float = 120.0) -> NmapHost | None:
+def service_scan(
+    target: str,
+    timeout: float = 120.0,
+    cancel_event: Event | None = None,
+) -> NmapHost | None:
     """Service/version detection (`nmap -sV`) against a single host.
 
     Only accepts a single IP/hostname (never a range) — this is the
@@ -135,7 +155,12 @@ def service_scan(target: str, timeout: float = 120.0) -> NmapHost | None:
     if "/" in target and not is_single_ip:
         raise InvalidTarget("service_scan accepts a single host, not a CIDR range")
 
-    result = run(["nmap", "-sV", "-oX", "-", target], timeout=timeout)
+    argv = ["nmap", "-sV", "-oX", "-", target]
+    result = (
+        run(argv, timeout=timeout)
+        if cancel_event is None
+        else run_cancellable(argv, timeout=timeout, cancel_event=cancel_event)
+    )
     if not result.ok:
         raise RuntimeError(f"nmap service scan failed: {result.stderr.strip()}")
     hosts = _parse_nmap_xml(result.stdout)

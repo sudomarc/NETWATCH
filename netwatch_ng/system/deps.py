@@ -22,25 +22,17 @@ class Dependency:
 
 
 REGISTRY: list[Dependency] = [
-    Dependency("ip", "interfaces, routes, gateway, ARP/neighbor table", "core, discovery", True),
-    Dependency("nmap", "host discovery, port/service and OS fingerprinting", "discovery, device intelligence, router intelligence", True),
-    Dependency("iw", "Wi-Fi interface/mode and scan capability", "wifi intelligence", False),
-    Dependency("rfkill", "wireless radio soft/hard-block state", "wifi intelligence", False),
-    Dependency("nft", "nftables rule management", "firewall manager", False),
-    Dependency("iptables", "iptables fallback rule management", "firewall manager", False),
-    Dependency("ip6tables", "IPv6 firewall rule management", "firewall manager", False),
-    Dependency("tc", "traffic shaping (HTB/IFB)", "traffic manager", False),
-    Dependency("tcpdump", "passive packet capture", "wifi intelligence, diagnostics", False),
-    Dependency("tshark", "packet capture with protocol decode", "diagnostics", False),
-    Dependency("snmpwalk", "SNMP-based router/device fingerprinting", "router intelligence, device intelligence", False),
-    Dependency("avahi-browse", "mDNS/Avahi service discovery", "device intelligence", False),
-    Dependency("ethtool", "link speed/duplex/driver info", "diagnostics", False),
-    Dependency("mtr", "combined traceroute + ping diagnostics", "diagnostics", False),
-    Dependency("traceroute", "route-path diagnostics", "diagnostics", False),
-    Dependency("iperf3", "throughput testing", "diagnostics", False),
-    Dependency("ssh", "router SSH administration bridge", "router intelligence", False),
-    Dependency("aircrack-ng", "Wi-Fi survey/audit suite", "wifi intelligence", False),
-    Dependency("airodump-ng", "Wi-Fi passive capture and survey", "wifi intelligence", False),
+    Dependency("ip", "interfaces, routes, gateway and neighbor inspection", "core, discovery, router intelligence, diagnostics", True),
+    Dependency("nmap", "operator-triggered host discovery and per-host service detection", "device discovery and identification", False),
+    Dependency("iw", "wireless interface inventory and access-point surveys", "Wi-Fi intelligence", False),
+    Dependency("rfkill", "wireless radio soft/hard-block status", "Wi-Fi intelligence", False),
+    Dependency("iptables", "IPv4 NETWATCH-owned forwarding rules", "firewall manager", False),
+    Dependency("ip6tables", "IPv6 NETWATCH-owned forwarding rules", "firewall manager", False),
+    Dependency("tc", "Linux traffic-control packet policing", "traffic manager", False),
+    Dependency("ping", "gateway reachability diagnostics", "diagnostics", False),
+    Dependency("getent", "system resolver lookup diagnostics", "diagnostics", False),
+    Dependency("mtr", "route-path diagnostics", "diagnostics", False),
+    Dependency("traceroute", "route-path diagnostics fallback", "diagnostics", False),
 ]
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from netwatch_ng.router_intelligence import RouterReport
-from netwatch_ng.tui.screens import router_intelligence, wifi_intelligence
+from netwatch_ng.tui.screens import diagnostics as diagnostics_screen, router_intelligence, wifi_intelligence
 from netwatch_ng.wifi_intelligence import AccessPoint, RadioState, WirelessInterface
 
 
@@ -35,3 +35,14 @@ def test_wifi_screen_discloses_channel_count_limitation(monkeypatch):
     )
     assert any("Observed APs per channel" in line for line in lines)
     assert any("not measured RF utilization" in line for line in lines)
+
+
+def test_diagnostics_screen_documents_available_tui_actions(monkeypatch):
+    monkeypatch.setattr(diagnostics_screen.network, "get_default_gateway", lambda family: None)
+    monkeypatch.setattr(diagnostics_screen.network, "get_dns_servers", lambda: [])
+
+    lines = diagnostics_screen.build_diagnostics_lines()
+
+    assert any("p ping the default gateway" in line for line in lines)
+    assert any("t trace a route to a host/IP" in line for line in lines)
+    assert any("d look up DNS" in line for line in lines)
