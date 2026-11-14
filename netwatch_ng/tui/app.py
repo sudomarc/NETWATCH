@@ -6,7 +6,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event
 
-from netwatch_ng import activity_log, diagnostics, reset_manager, router_intelligence, settings, wifi_intelligence
+from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, wifi_intelligence
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
@@ -103,6 +103,8 @@ def _screen_lines(
     diagnostic_result: diagnostics.DiagnosticResult | None = None,
     diagnostic_message: str | None = None,
     settings_message: str | None = None,
+    firewall_message: str | None = None,
+    traffic_message: str | None = None,
 ) -> list[str]:
     if label == "Dashboard":
         return build_dashboard_lines()
@@ -115,9 +117,9 @@ def _screen_lines(
         interface, access_points = wifi_result if wifi_result is not None else (None, None)
         return build_wifi_lines(access_points, interface, wifi_message)
     if label == "Firewall":
-        return build_firewall_lines()
+        return build_firewall_lines(firewall_message)
     if label == "Traffic Manager":
-        return build_traffic_lines()
+        return build_traffic_lines(traffic_message)
     if label == "Reset Manager":
         return build_reset_lines(reset_message)
     if label == "Network Diagnostics":
@@ -162,6 +164,8 @@ def run(stdscr) -> None:
     diagnostic_message = None
     reset_message = None
     settings_message = None
+    firewall_message = None
+    traffic_message = None
     wifi_cancel = Event()
     previous_selected = None
     lines: list[str] = []
@@ -210,6 +214,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
                 except Exception as exc:
                     lines = [f"Error building screen: {exc}"]
@@ -227,6 +232,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
 
             if wifi_scan is not None and wifi_scan.done():
@@ -241,6 +247,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
 
             if diagnostic_task is not None and diagnostic_task.done():
@@ -260,6 +267,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
 
             for i, line in enumerate(lines):
@@ -278,7 +286,11 @@ def run(stdscr) -> None:
             elif label == "Network Diagnostics":
                 footer = "Up/Down: navigate   p: ping gateway   t: trace route   d: DNS lookup   r: refresh"
             elif label == "Settings":
-                footer = "Up/Down: navigate   + / -: refresh interval   0: disable   r: refresh"
+                footer = "Settings: +/- refresh interval, 0 disable, r refresh"
+            elif label == "Firewall":
+                footer = "Firewall: b block IP, u unblock IP, r refresh"
+            elif label == "Traffic Manager":
+                footer = "Traffic: l set limit, c clear limit, r refresh"
             stdscr.addstr(height - 1, 0, footer[: max(width - 1, 0)], curses.A_DIM)
             stdscr.refresh()
 
@@ -290,10 +302,14 @@ def run(stdscr) -> None:
                 selected = (selected - 1) % len(MENU)
                 reset_message = None
                 settings_message = None
+                firewall_message = None
+                traffic_message = None
             elif key == curses.KEY_DOWN:
                 selected = (selected + 1) % len(MENU)
                 reset_message = None
                 settings_message = None
+                firewall_message = None
+                traffic_message = None
             elif key in (ord("r"), ord("R")):
                 previous_selected = None
             elif key in (ord("x"), ord("X")) and label == "Reset Manager":
@@ -317,6 +333,75 @@ def run(stdscr) -> None:
                 else:
                     reset_message = "Reset cancelled; no changes requested."
                 previous_selected = None
+            elif key in (ord("b"), ord("B"), ord("u"), ord("U")) and label == "Firewall":
+                target = _prompt_text(stdscr, "IPv4/IPv6 address: ", 64)
+                if target:
+                    family = "inet6" if ":" in target else "inet"
+                    action = "block" if key in (ord("b"), ord("B")) else "unblock"
+                    prompt = f"{action.capitalize()} {target} on the forwarding path? Press y to confirm."
+                    stdscr.move(height - 1, 0)
+                    stdscr.clrtoeol()
+                    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
+                    stdscr.refresh()
+                    if stdscr.getch() in (ord("y"), ord("Y")):
+                        try:
+                            changed = firewall.block_ip(target, family=family) if action == "block" else firewall.unblock_ip(target, family=family)
+                            firewall_message = f"{action.capitalize()} {'applied' if changed else 'already in requested state'}: {target}"
+                            activity_log.record_event("Firewall", action, "success", target)
+                        except Exception as exc:
+                            firewall_message = f"{action.capitalize()} failed for {target}: {exc}"
+                            try:
+                                activity_log.record_event("Firewall", action, "error", str(exc))
+                            except Exception:
+                                pass
+                    else:
+                        firewall_message = f"{action.capitalize()} cancelled."
+                    previous_selected = None
+            elif key in (ord("l"), ord("L")) and label == "Traffic Manager":
+                interface = _prompt_text(stdscr, "Interface (e.g. eth0): ", 15)
+                rate_text = _prompt_text(stdscr, "Rate in kbit/s (integer): ", 12)
+                direction = _prompt_text(stdscr, "Direction (egress/ingress): ", 8).lower()
+                if interface and rate_text and direction:
+                    try:
+                        rate = int(rate_text)
+                        limit = traffic.set_limit(interface, rate, direction=direction)
+                        traffic_message = (
+                            f"{limit.direction} packet policing set on {limit.interface}: "
+                            f"{limit.rate_kbps} kbit/s. Excess packets are dropped."
+                        )
+                        activity_log.record_event("Traffic", "set_limit", "success", traffic_message)
+                    except Exception as exc:
+                        traffic_message = f"Could not set traffic limit: {exc}"
+                        try:
+                            activity_log.record_event("Traffic", "set_limit", "error", str(exc))
+                        except Exception:
+                            pass
+                    previous_selected = None
+            elif key in (ord("c"), ord("C")) and label == "Traffic Manager":
+                interface = _prompt_text(stdscr, "Interface to clear: ", 15)
+                direction = _prompt_text(stdscr, "Direction (egress/ingress): ", 8).lower()
+                if interface and direction:
+                    prompt = f"Remove NETWATCH {direction} policing on {interface}? Press y to confirm."
+                    stdscr.move(height - 1, 0)
+                    stdscr.clrtoeol()
+                    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
+                    stdscr.refresh()
+                    if stdscr.getch() in (ord("y"), ord("Y")):
+                        try:
+                            removed = traffic.clear_limit(interface, direction=direction)
+                            traffic_message = (
+                                f"{'Removed' if removed else 'No active NETWATCH rule'}: {interface} {direction}"
+                            )
+                            activity_log.record_event("Traffic", "clear_limit", "success", traffic_message)
+                        except Exception as exc:
+                            traffic_message = f"Could not clear traffic limit: {exc}"
+                            try:
+                                activity_log.record_event("Traffic", "clear_limit", "error", str(exc))
+                            except Exception:
+                                pass
+                    else:
+                        traffic_message = "Traffic limit removal cancelled."
+                    previous_selected = None
             elif key in (ord("p"), ord("P")) and label == "Router Intelligence":
                 if router_probe is None:
                     router_message = "Checking common TCP management ports on the gateway..."
@@ -324,6 +409,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
                     router_probe = executor.submit(router_intelligence.inspect_and_probe_gateway)
             elif key in (ord("s"), ord("S")) and label == "Wi-Fi Intelligence":
@@ -333,6 +419,7 @@ def run(stdscr) -> None:
                         label, status, router_result, router_message,
                         wifi_result, wifi_message, reset_message,
                         diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message,
                     )
                     wifi_scan = executor.submit(
                         wifi_intelligence.scan_available_networks,

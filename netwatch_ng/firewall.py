@@ -78,10 +78,11 @@ def list_netwatch_rules(family: str = "inet") -> list[FirewallRule]:
     """Return NETWATCH-owned firewall rules for this family, if any."""
     binary = _binary_for_family(family)
     if which(binary) is None:
-        return []
+        raise BinaryNotFound(binary)
     result = run([binary, "-S"], timeout=5.0)
     if not result.ok:
-        return []
+        detail = result.stderr.strip() or result.stdout.strip() or "command failed"
+        raise RuntimeError(f"failed to inspect {family} firewall rules: {detail}")
     return _parse_iptables_rules(result.stdout, family)
 
 

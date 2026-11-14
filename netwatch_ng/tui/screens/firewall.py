@@ -4,7 +4,7 @@ from __future__ import annotations
 from netwatch_ng.firewall import list_netwatch_rules
 
 
-def build_firewall_lines() -> list[str]:
+def build_firewall_lines(message: str | None = None) -> list[str]:
     lines = [
         "Firewall Manager",
         "Current engine: iptables/ip6tables NETWATCH-owned FORWARD rules.",
@@ -16,11 +16,16 @@ def build_firewall_lines() -> list[str]:
         return [*lines, f"Firewall state unavailable: {exc}"]
     if not rules:
         lines.append("No NETWATCH-owned firewall rules are currently present.")
-        lines.append("The firewall engine API supports single-IP block/unblock.")
+        lines.append("Use b to block or u to unblock a single IP on the forwarding path.")
+        if message:
+            lines.extend(["", message])
         return lines
     lines.append("NETWATCH-owned rules:")
     for rule in rules:
         lines.append(
             f"  [{rule.family}] {rule.chain:<12} source={rule.source or '-':<16} target={rule.target}"
         )
+    if message:
+        lines.extend(["", message])
+    lines.extend(["", "b: block IP   u: unblock IP"])
     return lines
