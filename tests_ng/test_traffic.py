@@ -114,3 +114,32 @@ def test_set_limit_validates_interface_and_rate(monkeypatch, tmp_path):
         set_limit("eth0;id", 512)
     with pytest.raises(ValueError):
         set_limit("eth0", 0)
+
+
+def test_list_limits_rejects_filter_with_changed_rate(monkeypatch, tmp_path):
+    traffic = _setup(monkeypatch, tmp_path)
+    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    def fake_run(argv, timeout=5.0):
+        if argv[1:3] == ["qdisc", "show"]:
+            return CommandResult(argv, 0, "qdisc clsact ffff: parent ffff:fff1\n", "")
+        return CommandResult(argv, 0, "filter protocol all pref 49152 matchall chain 0\naction order 1: police rate 2Mbit burst 64Kb\n", "")
+    monkeypatch.setattr(traffic, "run", fake_run)
+    with pytest.raises(RuntimeError, match="missing or was replaced"):
+        list_limits()
+
+
+def test_clear_limit_refuses_filter_with_changed_rate(monkeypatch, tmp_path):
+    traffic = _setup(monkeypatch, tmp_path)
+    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    calls = []
+    def fake_run(argv, timeout=5.0):
+        calls.append(tuple(argv))
+        if argv[1:3] == ["filter", "show"]:
+            return CommandResult(argv, 0, "filter protocol all pref 49152 matchall chain 0\naction order 1: police rate 2Mbit burst 64Kb\n", "")
+        return CommandResult(argv, 0, "", "")
+    monkeypatch.setattr(traffic, "run", fake_run)
+    with pytest.raises(RuntimeError, match="unverified"):
+        clear_limit("eth0")
+    assert not any(call[1:3] == ("filter", "del") for call in calls)

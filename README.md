@@ -4,28 +4,43 @@ NETWATCH is a Linux-only Bash toolkit for network discovery and controlled gatew
 
 ## NETWATCH NG (2.x development)
 
-The Python rewrite is under active development; it does not replace the
-stable 1.x commands below and is not yet packaged as a Debian/APT release.
-Its TUI is available from a source checkout with `python -m netwatch_ng`.
+NETWATCH NG is the Python 3 rewrite and uses an exclusively terminal-based
+TUI. Launch from a source checkout with \`python -m netwatch_ng\`; the
+Debian package build is validated in GitHub Actions for Debian 12 and 13,
+but no public APT repository or stable 2.0.0 release is available yet.
 
-Implemented NG areas include interface/gateway inspection, passive and
-Nmap-based device discovery, evidence-based device identification, router
-gateway intelligence, Wi‑Fi inventory/surveys, rule-based firewall block
-management, and egress traffic shaping via Linux `tc`. Router
-Intelligence uses the local default route and neighbor table; its optional
-`p` check tests only common TCP management ports on that gateway. Wi‑Fi
-Intelligence lists local radios and their supported modes, and runs an
-access-point survey only when requested with `s`. Firewall Manager inspects
-NETWATCH-owned iptables/ip6tables rules and adds/removes single-IP block
-rules while refusing to touch the default gateway or malformed targets.
-Traffic Manager exposes egress rate caps only; ingress IFB shaping remains
-explicitly unavailable. Both screens are reachable in the TUI; `r`
-refreshes the current screen. Scans may require Linux privileges and
-optional tools such as `iw` or `rfkill`. OUI matches and advertised Wi‑Fi
-security are hints, not verified device/model/security claims.
-SNMP/UPnP router discovery, model/firmware fingerprinting, Wi‑Fi client
-capture, Aircrack-ng actions, and Debian/APT distribution are not
-implemented yet. The legacy 1.x capability table below describes the Bash
+Current NG capabilities:
+- Dashboard and Linux interface/gateway/DNS inspection.
+- Passive ARP/NDP discovery and operator-triggered Nmap host discovery from
+  the Devices screen. Nmap scans run only after the operator enters a target
+  or subnet; they are not launched automatically.
+- Evidence-based device identification using neighbor data, Nmap and a
+  local OUI table. Vendor/hostname evidence remains labelled with its source
+  and confidence.
+- Router inspection based on the local default route, neighbor MAC/OUI hints
+  and reachability checks for common management TCP ports. SNMP, UPnP/SSDP,
+  and model/firmware fingerprinting are not implemented.
+- Wi-Fi radio inventory and operator-triggered access-point survey through
+  \`iw\`. Aircrack-ng audit actions and client capture are not implemented.
+- IPv4/IPv6 single-IP block/unblock through NETWATCH-owned iptables rules on
+  the FORWARD chain. This affects forwarded traffic only; it is not a
+  universal way to block a device on the same LAN.
+- Traffic rate policing through \`tc\` clsact filters for egress and ingress.
+  This is packet policing: packets above the configured rate are dropped.
+  It is not smooth queue-based HTB shaping. The root qdisc is not replaced.
+- Reset Manager read-only preview and explicit confirmation before reset.
+- Diagnostics for gateway ping, DNS lookup and route trace.
+- Persisted settings (the TUI currently exposes automatic refresh controls)
+  and a bounded JSONL activity log.
+
+Optional tools are detected at runtime. Capabilities that depend on missing
+tools are reported as unavailable. OUI matches and advertised Wi-Fi security
+are hints, not verified device/model/security claims.
+
+Not implemented in NG yet: a full SNMP/UPnP router fingerprinting stack,
+Aircrack-ng audit workflows, detailed packet analysis, rich device detail
+views, complete Settings controls, APT repository publication, and a stable
+2.0.0 release. The legacy 1.x capability table below describes the Bash
 toolkit, not the Python rewrite.
 
 ## Current version

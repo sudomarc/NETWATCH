@@ -145,12 +145,28 @@ def _pref_present(output: str, pref: int) -> bool:
     return re.search(rf"\bpref\s+{pref}\b", output) is not None
 
 
-def _looks_like_our_filter(output: str, pref: int) -> bool:
-    return (
-        _pref_present(output, pref)
-        and re.search(r"\bmatchall\b", output) is not None
-        and re.search(r"\bpolice\b", output) is not None
-    )
+def _looks_like_our_filter(
+    output: str,
+    pref: int,
+    expected_rate_kbps: int | None = None,
+) -> bool:
+    if (
+        not _pref_present(output, pref)
+        or re.search(r"\bmatchall\b", output) is None
+        or re.search(r"\bpolice\b", output) is None
+    ):
+        return False
+    if expected_rate_kbps is None:
+        return True
+
+    match = re.search(r"\brate\s+([0-9]+(?:\.[0-9]+)?)(bit|kbit|mbit|gbit)\b", output, re.IGNORECASE)
+    if match is None:
+        return False
+    numeric = float(match.group(1))
+    unit = match.group(2).lower()
+    factor_to_kbit = {"bit": 0.001, "kbit": 1.0, "mbit": 1000.0, "gbit": 1_000_000.0}
+    actual_rate = numeric * factor_to_kbit[unit]
+    return abs(actual_rate - expected_rate_kbps) < 0.01
 
 
 def _filter_argv(interface: str, direction: str, rate_kbps: int, replace: bool) -> list[str]:
@@ -188,7 +204,7 @@ def list_limits(interface: str | None = None) -> list[TrafficLimit]:
         if not _has_clsact(_qdisc_output(iface)):
             raise RuntimeError(f"NETWATCH traffic state is stale: clsact missing on {iface}")
         output = _filter_output(iface, direction)
-        if not _looks_like_our_filter(output, PREFS[direction]):
+        if not _looks_like_our_filter(output, PREFS[direction], entry["rate_kbps"]):
             raise RuntimeError(f"NETWATCH traffic filter is missing or was replaced: {iface} {direction}")
         limits.append(TrafficLimit(iface, direction, entry["rate_kbps"], f"pref-{PREFS[direction]}"))
     return limits
@@ -230,7 +246,7 @@ def set_limit(
         raise RuntimeError(
             f"tc preference {pref} is already occupied on {interface} {direction}; refusing to replace it"
         )
-    if present and existing and not _looks_like_our_filter(filters, pref):
+    if present and existing and not _looks_like_our_filter(filters, pref, existing["rate_kbps"]):
         raise RuntimeError(f"NETWATCH-owned tc filter cannot be verified on {interface} {direction}")
     if dry_run:
         return TrafficLimit(interface, direction, rate_kbps, f"pref-{pref}")
@@ -238,7 +254,7 @@ def set_limit(
     _require_root()
     _run_ok(_filter_argv(interface, direction, rate_kbps, replace=bool(existing and present)))
     verified = _filter_output(interface, direction)
-    if not _looks_like_our_filter(verified, pref):
+    if not _looks_like_our_filter(verified, pref, rate_kbps):
         raise RuntimeError(f"tc reported success but the NETWATCH filter could not be verified on {interface}")
 
     state["limits"][key] = {"rate_kbps": rate_kbps, "pref": pref}
@@ -273,7 +289,7 @@ def clear_limit(interface: str, direction: str = "egress", dry_run: bool = False
             del state["limits"][key]
             _write_state(state)
         return False
-    if not _looks_like_our_filter(filters, pref):
+    if not _looks_like_our_filter(filters, pref, state["limits"][key]["rate_kbps"]):
         raise RuntimeError(f"refusing to delete an unverified tc filter on {interface} {direction}")
     if dry_run:
         return True
