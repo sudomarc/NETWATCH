@@ -98,6 +98,21 @@ def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
 
 
 
+def _configure_colors(mode: str) -> bool:
+    if mode == "mono":
+        return False
+    try:
+        if not curses.has_colors():
+            return False
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(2, curses.COLOR_YELLOW, -1)
+        return True
+    except curses.error:
+        return False
+
+
 def _scan_wifi(cancel_event: Event):
     preferred = settings.load_settings()["preferred_interface"]
     if preferred:
@@ -176,11 +191,6 @@ def run(stdscr) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
     stdscr.timeout(200)
-    curses.start_color()
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-    curses.init_pair(2, curses.COLOR_YELLOW, -1)
-
     selected = 0
     executor = ThreadPoolExecutor(max_workers=2)
     router_probe: Future | None = None
@@ -208,8 +218,12 @@ def run(stdscr) -> None:
         try:
             current_settings = settings.load_settings()
             refresh_seconds = current_settings["refresh_seconds"]
+            color_mode = current_settings["color_mode"]
+            colors_enabled = _configure_colors(color_mode)
         except Exception as exc:
             refresh_seconds = 0
+            color_mode = "auto"
+            colors_enabled = _configure_colors(color_mode)
             settings_message = f"Settings unavailable; automatic refresh disabled: {exc}"
         last_refresh = time.monotonic()
 
@@ -237,8 +251,11 @@ def run(stdscr) -> None:
                     break
                 marker = " " if menu_status == IMPLEMENTED else "~"
                 item_text = f"{marker} {menu_label}"[: menu_width - 1]
-                attr = curses.color_pair(1) if row == selected else curses.A_NORMAL
-                if menu_status != IMPLEMENTED and row != selected:
+                if row == selected:
+                    attr = curses.color_pair(1) if colors_enabled else curses.A_REVERSE
+                else:
+                    attr = curses.A_NORMAL
+                if menu_status != IMPLEMENTED and row != selected and colors_enabled:
                     attr = curses.color_pair(2)
                 stdscr.addstr(y, 0, item_text.ljust(menu_width), attr)
 
@@ -614,6 +631,18 @@ def run(stdscr) -> None:
                         )
                     except ValueError:
                         settings_message = "Scan timeout must be an integer from 10 to 300."
+                previous_selected = None
+            elif key in (ord("c"), ord("C")) and label == "Settings":
+                modes = ("auto", "color", "mono")
+                next_mode = modes[(modes.index(color_mode) + 1) % len(modes)]
+                saved, settings_message = _save_setting_value(
+                    "color_mode", next_mode, f"Color mode set to {next_mode}."
+                )
+                if saved:
+                    color_mode = next_mode
+                    colors_enabled = _configure_colors(color_mode)
+                    if color_mode == "color" and not colors_enabled:
+                        settings_message += " Terminal does not support colors; monochrome rendering remains active."
                 previous_selected = None
             elif key in (ord("i"), ord("I")) and label == "Settings":
                 interface = _prompt_text(stdscr, "Preferred Wi-Fi interface (blank clears): ", 15)

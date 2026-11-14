@@ -14,7 +14,7 @@ def build_settings_lines(message: str | None = None) -> list[str]:
         f"Color mode: {values['color_mode']}",
         "",
         "Keys: +/- adjust refresh, 0 disables it, t sets Nmap timeout.",
-        "i selects a preferred Wi-Fi interface for surveys.",
+        "i selects a preferred Wi-Fi interface; c cycles auto/color/mono.",
         "Settings are stored in the user/system NETWATCH NG configuration directory.",
     ]
     if message:
