@@ -18,8 +18,10 @@ Current NG capabilities:
   local OUI table. Vendor/hostname evidence remains labelled with its source
   and confidence.
 - Router inspection based on the local default route, neighbor MAC/OUI hints
-  and reachability checks for common management TCP ports. SNMP, UPnP/SSDP,
-  and model/firmware fingerprinting are not implemented.
+  and reachability checks for common management TCP ports. A manual,
+  read-only UPnP/SSDP query is restricted to the configured gateway; an HTTP
+  device description is fetched only from that same literal IP. SNMP and
+  deeper vendor/model/firmware fingerprinting are not implemented.
 - Wi-Fi radio inventory and operator-triggered access-point survey through
   `iw`. Aircrack-ng audit actions and client capture are not implemented.
 - IPv4/IPv6 single-IP block/unblock through NETWATCH-owned iptables rules on
@@ -37,7 +39,7 @@ Optional tools are detected at runtime. Capabilities that depend on missing
 tools are reported as unavailable. OUI matches and advertised Wi-Fi security
 are hints, not verified device/model/security claims.
 
-Not implemented in NG yet: a full SNMP/UPnP router fingerprinting stack,
+Not implemented in NG yet: SNMP router discovery and a full vendor/model/firmware fingerprinting stack,
 Aircrack-ng audit workflows, detailed packet analysis, rich device detail
 views, complete Settings controls, APT repository publication, and a stable
 2.0.0 release. The legacy 1.x capability table below describes the Bash
