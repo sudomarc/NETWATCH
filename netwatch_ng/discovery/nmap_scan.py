@@ -47,7 +47,7 @@ def _validate_targets(targets: str) -> None:
     obvious shell-metacharacter injection surface. nmap itself still
     validates/rejects malformed targets.
     """
-    forbidden = set(";|&\`$(){}<>\n")
+    forbidden = set(";|&`$(){}<>\n")
     if (
         not isinstance(targets, str)
         or not targets

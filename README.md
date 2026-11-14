@@ -5,7 +5,7 @@ NETWATCH is a Linux-only Bash toolkit for network discovery and controlled gatew
 ## NETWATCH NG (2.x development)
 
 NETWATCH NG is the Python 3 rewrite and uses an exclusively terminal-based
-TUI. Launch from a source checkout with \`python -m netwatch_ng\`; the
+TUI. Launch from a source checkout with `python -m netwatch_ng`; the
 Debian package build is validated in GitHub Actions for Debian 12 and 13,
 but no public APT repository or stable 2.0.0 release is available yet.
 
@@ -21,11 +21,11 @@ Current NG capabilities:
   and reachability checks for common management TCP ports. SNMP, UPnP/SSDP,
   and model/firmware fingerprinting are not implemented.
 - Wi-Fi radio inventory and operator-triggered access-point survey through
-  \`iw\`. Aircrack-ng audit actions and client capture are not implemented.
+  `iw`. Aircrack-ng audit actions and client capture are not implemented.
 - IPv4/IPv6 single-IP block/unblock through NETWATCH-owned iptables rules on
   the FORWARD chain. This affects forwarded traffic only; it is not a
   universal way to block a device on the same LAN.
-- Traffic rate policing through \`tc\` clsact filters for egress and ingress.
+- Traffic rate policing through `tc` clsact filters for egress and ingress.
   This is packet policing: packets above the configured rate are dropped.
   It is not smooth queue-based HTB shaping. The root qdisc is not replaced.
 - Reset Manager read-only preview and explicit confirmation before reset.

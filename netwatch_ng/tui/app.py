@@ -93,6 +93,20 @@ def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
     return raw.decode("utf-8", errors="replace").strip()
 
 
+
+
+def _save_setting_value(key: str, value, description: str) -> tuple[bool, str]:
+    try:
+        settings.update_setting(key, value)
+    except Exception as exc:
+        return False, f"Could not save {key}: {exc}"
+    try:
+        activity_log.record_event("Settings", key, "success", description)
+    except Exception as exc:
+        return True, f"{description} (saved; activity log unavailable: {exc})"
+    return True, description
+
+
 def _screen_lines(
     label: str,
     status: str,
@@ -173,6 +187,7 @@ def run(stdscr) -> None:
     firewall_message = None
     traffic_message = None
     wifi_cancel = Event()
+    device_cancel = Event()
     previous_selected = None
     lines: list[str] = []
     try:
@@ -280,13 +295,17 @@ def run(stdscr) -> None:
                 try:
                     diagnostic_result = diagnostic_task.result()
                     diagnostic_message = None
-                    activity_log.record_event(
-                        "Diagnostics", diagnostic_result.name,
-                        "success" if diagnostic_result.ok else "warning",
-                        diagnostic_result.summary,
-                    )
                 except Exception as exc:
                     diagnostic_message = f"Diagnostic failed: {exc}"
+                else:
+                    try:
+                        activity_log.record_event(
+                            "Diagnostics", diagnostic_result.name,
+                            "success" if diagnostic_result.ok else "warning",
+                            diagnostic_result.summary,
+                        )
+                    except Exception as exc:
+                        diagnostic_message = f"Diagnostic completed; activity log unavailable: {exc}"
                 diagnostic_task = None
                 if label == "Network Diagnostics":
                     lines = _screen_lines(
@@ -325,6 +344,7 @@ def run(stdscr) -> None:
             key = stdscr.getch()
             if key in (ord("q"), ord("Q")):
                 wifi_cancel.set()
+                device_cancel.set()
                 break
             if key == curses.KEY_UP:
                 selected = (selected - 1) % len(MENU)
@@ -372,7 +392,7 @@ def run(stdscr) -> None:
                             diagnostic_result, diagnostic_message, settings_message,
                             firewall_message, traffic_message, device_result, device_message,
                         )
-                        device_scan = executor.submit(devices_mod.active_scan, target)
+                        device_scan = executor.submit(\n                            devices_mod.active_scan, target,\n                            timeout=settings.load_settings()["scan_timeout_seconds"],\n                            cancel_event=device_cancel,\n                        )
             elif key in (ord("b"), ord("B"), ord("u"), ord("U")) and label == "Firewall":
                 target = _prompt_text(stdscr, "IPv4/IPv6 address: ", 64)
                 if target:
@@ -479,35 +499,25 @@ def run(stdscr) -> None:
                     diagnostic_message = f"Resolving {hostname}..."
                     diagnostic_task = executor.submit(diagnostics.resolve_dns, hostname)
             elif key in (ord("+"), ord("=")) and label == "Settings":
-                refresh_seconds = 5 if refresh_seconds == 0 else min(300, refresh_seconds + 5)
-                try:
-                    settings.update_setting("refresh_seconds", refresh_seconds)
-                    settings_message = f"Automatic refresh set to {refresh_seconds} seconds."
-                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
-                except Exception as exc:
-                    settings_message = f"Could not save refresh setting: {exc}"
+                next_value = 5 if refresh_seconds == 0 else min(300, refresh_seconds + 5)
+                description = f"Automatic refresh set to {next_value} seconds."
+                saved, settings_message = _save_setting_value("refresh_seconds", next_value, description)
+                if saved:
+                    refresh_seconds = next_value
                 previous_selected = None
             elif key == ord("-") and label == "Settings":
-                refresh_seconds = max(0, refresh_seconds - 5)
-                try:
-                    settings.update_setting("refresh_seconds", refresh_seconds)
-                    settings_message = (
-                        "Automatic refresh disabled."
-                        if refresh_seconds == 0
-                        else f"Automatic refresh set to {refresh_seconds} seconds."
-                    )
-                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
-                except Exception as exc:
-                    settings_message = f"Could not save refresh setting: {exc}"
+                next_value = max(0, refresh_seconds - 5)
+                description = "Automatic refresh disabled." if next_value == 0 else f"Automatic refresh set to {next_value} seconds."
+                saved, settings_message = _save_setting_value("refresh_seconds", next_value, description)
+                if saved:
+                    refresh_seconds = next_value
                 previous_selected = None
             elif key == ord("0") and label == "Settings":
-                refresh_seconds = 0
-                try:
-                    settings.update_setting("refresh_seconds", 0)
-                    settings_message = "Automatic refresh disabled."
-                    activity_log.record_event("Settings", "refresh_changed", "success", settings_message)
-                except Exception as exc:
-                    settings_message = f"Could not save refresh setting: {exc}"
+                saved, settings_message = _save_setting_value(
+                    "refresh_seconds", 0, "Automatic refresh disabled."
+                )
+                if saved:
+                    refresh_seconds = 0
                 previous_selected = None
     finally:
         wifi_cancel.set()
