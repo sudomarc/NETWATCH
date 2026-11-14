@@ -2,6 +2,29 @@
 
 NETWATCH is a Linux-only Bash toolkit for network discovery and controlled gateway administration on systems and networks you are authorized to manage.
 
+## NETWATCH NG (2.x development)
+
+The Python rewrite is under active development; it does not replace the
+stable 1.x commands below and is not yet packaged as a Debian/APT release.
+Its TUI is available from a source checkout with `python -m netwatch_ng`.
+
+Implemented NG areas include interface/gateway inspection, passive and
+Nmap-based device discovery, evidence-based device identification, router
+gateway intelligence, and Wi-Fi inventory/surveys. Router Intelligence
+uses the local default route and neighbor table; its optional `p` check
+tests only common TCP management ports on that gateway. Wi-Fi Intelligence
+lists local radios and their supported modes, and runs an access-point
+survey only when requested with `s`. Both screens are reachable in the
+TUI; `r` refreshes the current screen. Scans may require Linux privileges
+and optional tools such as `iw` or `rfkill`. OUI matches and advertised
+Wi-Fi security are hints, not verified device/model/security claims.
+SNMP/UPnP router discovery, model/firmware fingerprinting, and Wi-Fi
+client capture or Aircrack-ng actions are not implemented.
+
+Firewall, traffic shaping, diagnostics, Debian packaging, and APT
+distribution are not yet implemented in NETWATCH NG. The legacy 1.x
+capability table below describes the Bash toolkit, not the Python rewrite.
+
 ## Current version
 
 **1.3.1** (stabilization branch; the published `v1.3.0` release is historical).
