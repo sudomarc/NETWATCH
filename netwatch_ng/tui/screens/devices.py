@@ -13,8 +13,11 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
 
     if which("ip") is None:
         return [
-            "Devices: 'ip' (iproute2) not installed — cannot read the neighbor table.",
-            "See System Manager.",
+            "DEVICES",
+            "",
+            "ENGINE",
+            "  [ERROR] 'ip' (iproute2) not installed — cannot read the neighbor table.",
+            "  See System Manager.",
         ]
 
     found = devices_mod.passive_scan("inet")
@@ -32,14 +35,19 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
 
     display_devices = active_devices if active_devices is not None else found
     mode = "active Nmap + neighbor discovery" if active_devices is not None else "passive ARP/NDP neighbor table"
-    lines.append(f"Devices ({mode}): {len(display_devices)} found")
+    lines.append("DEVICES")
+    lines.append("")
+    lines.append("INVENTORY")
+    lines.append(f"  Mode: {mode}")
+    lines.append(f"  Devices detected: [READY] {len(display_devices)}")
     if active_devices is None:
-        lines.append("n: active Nmap discovery   v: service/version scan for one host")
-        lines.append("e: export current inventory to JSON or CSV")
+        lines.append("  n: active Nmap discovery   v: service/version scan for one host")
+        lines.append("  e: export current inventory to JSON or CSV   r: refresh")
     lines.append("")
     if not found:
-        lines.append("No live neighbor-table entries. Generate traffic (e.g. ping the")
-        lines.append("subnet) or wait for ARP cache to populate, then revisit.")
+        lines.append("  [DEGRADED] no live neighbor-table entries.")
+        lines.append("     Generate traffic (e.g. ping the subnet) or wait for the ARP cache")
+        lines.append("     to populate, then revisit.")
     for d in display_devices:
         hostname = d.hostname.value if d.hostname else "-"
         ports = ",".join(str(port) for port in d.open_ports) or "-"
@@ -56,7 +64,8 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
 
     if diff is not None:
         lines.append("")
-        lines.append(f"Since last scan — new: {len(diff.new)}  missing: {len(diff.missing)}  reappeared: {len(diff.reappeared)}")
+        lines.append("DETECTION DELTA")
+        lines.append(f"  Since last scan — new: [READY] {len(diff.new)}  missing: [WARNING] {len(diff.missing)}  reappeared: [INFO] {len(diff.reappeared)}")
         if diff.new:
             lines.append(f"  new: {', '.join(diff.new)}")
         if diff.missing:
@@ -65,7 +74,8 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
             lines.append(f"  reappeared: {', '.join(diff.reappeared)}")
 
     if history_warning:
-        lines.append(history_warning)
+        lines.append("")
+        lines.append(f"  [WARNING] {history_warning}")
 
     if message:
         lines.extend(["", message])

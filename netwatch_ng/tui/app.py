@@ -1,4 +1,10 @@
-"""NETWATCH NG keyboard-driven terminal application."""
+"""NETWATCH NG keyboard-driven terminal application.
+
+The engine and the asynchronous action handling are unchanged: only the
+visual shell (header, navigation sidebar, content panels, footer) and the
+color rendering are reworked into a dark NOC-inspired language. Every
+``build_*_lines`` screen contract is preserved.
+"""
 from __future__ import annotations
 
 import curses
@@ -8,8 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
 
+from netwatch_ng import __version__
 from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, upnp, wifi_intelligence
 from netwatch_ng.discovery import device_intelligence, devices as devices_mod, export as device_export, nmap_scan
+from netwatch_ng.system.config import get_config_dir, is_root
+from netwatch_ng.tui import components, theme
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
@@ -21,10 +30,11 @@ from netwatch_ng.tui.screens.settings import build_settings_lines
 from netwatch_ng.tui.screens.system_manager import build_system_manager_lines
 from netwatch_ng.tui.screens.traffic_manager import build_traffic_lines
 from netwatch_ng.tui.screens.wifi_intelligence import build_wifi_lines
-from netwatch_ng.system.config import get_config_dir
 
 IMPLEMENTED = "implemented"
 PLANNED = "planned"
+
+MENU_WIDTH = 26
 
 MENU: list[tuple[str, str]] = [
     ("Dashboard", IMPLEMENTED),
@@ -40,6 +50,21 @@ MENU: list[tuple[str, str]] = [
     ("Logs", IMPLEMENTED),
     ("About", IMPLEMENTED),
 ]
+
+
+def _test_utf8_box(stdscr) -> bool:
+    """Return True when the terminal can render UTF-8 box-drawing characters.
+
+    Some minimal terminals (or misconfigured locales) cannot display
+    ┌─┐ │ └┘. When that is the case the TUI falls back to ASCII borders
+    (+ - |) so panels still draw without crashing.
+    """
+    try:
+        stdscr.addstr(0, 0, "┌─┐", curses.A_NORMAL)
+        stdscr.refresh()
+        return True
+    except Exception:
+        return False
 
 
 def _about_lines() -> list[str]:
@@ -117,8 +142,6 @@ def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
             pass
 
 
-
-
 def _confirm(stdscr, prompt: str) -> bool:
     """Blocking y/n confirmation that owns its keys.
 
@@ -148,29 +171,59 @@ def _confirm(stdscr, prompt: str) -> bool:
             pass
 
 
+def _confirm_blocking(stdscr, prompt: str) -> bool:
+    """Blocking confirmation that owns its keys until the operator answers.
+
+    The main loop runs with ``stdscr.timeout(200)``, so a plain ``getch()``
+    returns -1 every 200 ms and would silently cancel the confirmation.
+    This helper ignores idle returns and waits for an explicit answer:
+    y/Y confirms, Esc or any other key cancels. Used for actions that can
+    interrupt the operator's Wi-Fi connection.
+    """
+    height, width = stdscr.getmaxyx()
+    try:
+        curses.curs_set(1)
+    except curses.error:
+        pass
+    try:
+        while True:
+            stdscr.move(height - 1, 0)
+            stdscr.clrtoeol()
+            stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key == -1:
+                continue
+            if key == 27:
+                return False
+            return key in (ord("y"), ord("Y"))
+    finally:
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+
+
 def _configure_colors(mode: str) -> bool:
+    """Initialize the visual theme; monochrome when disabled or unsupported."""
     if mode == "mono":
         return False
-    try:
-        if not curses.has_colors():
-            return False
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)
-        return True
-    except curses.error:
-        return False
+    return theme.init_palette(True)
 
 
 def _scan_wifi(cancel_event: Event):
     preferred = settings.load_settings()["preferred_interface"]
+    timeout = settings.load_settings()["scan_timeout_seconds"]
     if preferred:
         available = {item.name for item in wifi_intelligence.list_wireless_interfaces()}
         if preferred not in available:
             raise RuntimeError(f"preferred Wi-Fi interface is unavailable: {preferred}")
-        return preferred, wifi_intelligence.scan_networks(preferred, cancel_event=cancel_event)
-    return wifi_intelligence.scan_available_networks(cancel_event=cancel_event)
+        return wifi_intelligence.scan_networks(
+            preferred, timeout=timeout, cancel_event=cancel_event
+        )
+    return wifi_intelligence.scan_available_networks(
+        timeout=timeout, cancel_event=cancel_event
+    )
 
 
 def _log_warning(module: str, action: str, status: str, detail: str) -> str:
@@ -217,8 +270,10 @@ def _screen_lines(
         report, services = router_result if router_result is not None else (None, None)
         return build_router_lines(report, services, router_message)
     if label == "Wi-Fi Intelligence":
-        interface, access_points = wifi_result if wifi_result is not None else (None, None)
-        return build_wifi_lines(access_points, interface, wifi_message)
+        interface, access_points, stations = (
+            wifi_result if wifi_result is not None else (None, None, None)
+        )
+        return build_wifi_lines(access_points, interface, wifi_message, stations=stations)
     if label == "Firewall":
         return build_firewall_lines(firewall_message)
     if label == "Traffic Manager":
@@ -243,6 +298,74 @@ def _reset_summary(report: reset_manager.ResetReport) -> str:
     succeeded = sum(1 for action in actions if action.success)
     failed = len(actions) - succeeded
     return f"Reset finished: {succeeded} succeeded, {failed} failed, {len(actions)} total."
+
+
+def _draw_header(stdscr, height, width, label: str, enabled: bool) -> None:
+    """Top identity bar: application, version, current mode and root state."""
+    addstr = components.addstr_safe
+    addstr(stdscr, 0, 0, "NETWATCH NG", theme.attr(theme.ACCENT, enabled, bold=True))
+    addstr(stdscr, 0, 13, f"v{__version__}", theme.attr(theme.MUTED, enabled))
+    root_text = f"root:{'yes' if is_root() else 'no'}"
+    mode_text = f"[{label}]  {root_text}"
+    right_x = max(width - len(mode_text) - 1, 14 + len(f"v{__version__}") + 4)
+    addstr(stdscr, 0, right_x, mode_text, theme.attr(theme.HEADER, enabled, bold=True))
+    addstr(stdscr, 1, 0, "─" * max(width - 1, 0), theme.attr(theme.BORDER, enabled))
+
+
+def _draw_menu(stdscr, height, selected: int, enabled: bool) -> None:
+    """Left navigation sidebar."""
+    addstr = components.addstr_safe
+    for row, (menu_label, menu_status) in enumerate(MENU):
+        y = row + 2
+        if y >= height - 1:
+            break
+        if row == selected:
+            prefix = "> "
+            attr = theme.attr(theme.SELECTION, enabled)
+        elif menu_status != IMPLEMENTED:
+            prefix = "~ "
+            attr = theme.attr(theme.MUTED, enabled)
+        else:
+            prefix = "  "
+            attr = theme.attr(theme.BODY, enabled)
+        item_text = f"{prefix}{menu_label}"[: MENU_WIDTH - 1]
+        addstr(stdscr, y, 0, item_text.ljust(MENU_WIDTH), attr)
+
+
+def _draw_footer(stdscr, height, width, label: str, enabled: bool) -> None:
+    """Contextual command bar."""
+    contextual = {
+        "Router Intelligence": "p: probe TCP ports   u: UPnP scan   r: refresh",
+        "Wi-Fi Intelligence": "s: survey access points   m: monitor mode   r: refresh",
+        "Reset Manager": "x: reset (confirmation required)   r: refresh",
+        "Network Diagnostics": "p: ping gateway   t: trace route   d: DNS lookup   r: refresh",
+        "Settings": "+ / -: refresh interval   0: disable   t: timeout   i: interface   c: color   r: refresh",
+        "Firewall": "b: block IP   u: unblock IP   r: refresh",
+        "Traffic Manager": "l: set limit   c: clear limit   r: refresh",
+        "Devices": "n: discover   v: service scan   e: export   r: refresh",
+    }.get(label, "r: refresh")
+    global_part = "↑↓ Navigate   Enter Select   r Refresh   q Quit"
+    footer = f"{global_part}   {contextual}"
+    addstr = components.addstr_safe
+    addstr(stdscr, height - 1, 0, footer[: max(width - 1, 0)], theme.attr(theme.MUTED, enabled))
+
+
+def _paint_content(stdscr, height, width, lines: list[str], enabled: bool) -> None:
+    """Paint screen content inside a bordered content panel."""
+    panel_x = MENU_WIDTH + 1
+    panel_y = 2
+    panel_w = max(width - panel_x - 1, 10)
+    panel_h = max(height - panel_y - 1, 3)
+    content_y, content_x, content_h, content_w = components.draw_panel(
+        stdscr, panel_y, panel_x, panel_h, panel_w, title=None, enabled=enabled
+    )
+    for i, line in enumerate(lines):
+        y = content_y + i
+        if y >= content_y + content_h:
+            break
+        components.paint_line(
+            stdscr, y, content_x, content_x + content_w, line, enabled, title=(i == 0)
+        )
 
 
 def run(stdscr) -> None:
@@ -271,6 +394,7 @@ def run(stdscr) -> None:
     traffic_message = None
     wifi_cancel = Event()
     device_cancel = Event()
+    wifi_monitor_interface: str | None = None
     previous_selected = None
     lines: list[str] = []
     try:
@@ -282,8 +406,17 @@ def run(stdscr) -> None:
         except Exception as exc:
             refresh_seconds = 0
             color_mode = "auto"
-            colors_enabled = _configure_colors(color_mode)
+            colors_enabled = _configure_colors("auto")
             settings_message = f"Settings unavailable; automatic refresh disabled: {exc}"
+
+        # Detect whether the terminal can render UTF-8 box-drawing characters;
+        # fall back to ASCII borders if it cannot (no crash on minimal terminals).
+        try:
+            if not _test_utf8_box(stdscr):
+                components.USE_ASCII_BOX = True
+        except Exception:
+            components.USE_ASCII_BOX = True
+
         last_refresh = time.monotonic()
 
         while True:
@@ -300,23 +433,6 @@ def run(stdscr) -> None:
             if refresh_seconds and time.monotonic() - last_refresh >= refresh_seconds:
                 previous_selected = None
                 last_refresh = time.monotonic()
-
-            stdscr.addstr(0, 0, "NETWATCH NG".ljust(max(width - 1, 0)), curses.A_BOLD)
-            stdscr.addstr(1, 0, "-" * max(width - 1, 0))
-            menu_width = 24
-            for row, (menu_label, menu_status) in enumerate(MENU):
-                y = row + 2
-                if y >= height - 1:
-                    break
-                marker = " " if menu_status == IMPLEMENTED else "~"
-                item_text = f"{marker} {menu_label}"[: menu_width - 1]
-                if row == selected:
-                    attr = curses.color_pair(1) if colors_enabled else curses.A_REVERSE
-                else:
-                    attr = curses.A_NORMAL
-                if menu_status != IMPLEMENTED and row != selected and colors_enabled:
-                    attr = curses.color_pair(2)
-                stdscr.addstr(y, 0, item_text.ljust(menu_width), attr)
 
             label, status = MENU[selected]
             if selected != previous_selected:
@@ -348,7 +464,12 @@ def run(stdscr) -> None:
 
             if wifi_scan is not None and wifi_scan.done():
                 try:
-                    wifi_result = wifi_scan.result()
+                    survey = wifi_scan.result()
+                    wifi_result = (
+                        survey.interface,
+                        survey.access_points,
+                        survey.stations,
+                    )
                     wifi_message = None
                 except Exception as exc:
                     wifi_message = f"Wi-Fi survey failed: {exc}"
@@ -394,7 +515,6 @@ def run(stdscr) -> None:
                         diagnostic_result, diagnostic_message, settings_message,
                         firewall_message, traffic_message, device_result, device_message,
                     )
-
 
             if service_scan is not None and service_scan.done():
                 try:
@@ -463,31 +583,32 @@ def run(stdscr) -> None:
                         firewall_message, traffic_message, device_result, device_message,
                     )
 
-            for i, line in enumerate(lines):
-                y = i + 2
-                if y >= height - 1:
+            # --- Rendu (toute erreur d'affichage est dégradée, jamais fatale) ---
+            try:
+                _draw_header(stdscr, height, width, MENU[selected][0], colors_enabled)
+                _draw_menu(stdscr, height, selected, colors_enabled)
+                _paint_content(stdscr, height, width, lines, colors_enabled)
+                _draw_footer(stdscr, height, width, label, colors_enabled)
+                stdscr.refresh()
+            except Exception as exc:
+                # Dernier ressort: effacer et afficher l'erreur pour que le TUI
+                # ne quitte jamais brutalement sur un terminal capricieux.
+                try:
+                    stdscr.erase()
+                    stdscr.addstr(0, 0, "NETWATCH NG — erreur d'affichage:", curses.A_BOLD)
+                    stdscr.addstr(1, 0, str(exc)[: max(width - 1, 0)])
+                    stdscr.addstr(3, 0, "Appuyez sur q pour quitter, r pour réessayer.", curses.A_DIM)
+                    stdscr.refresh()
+                except Exception:
+                    pass
+                key = stdscr.getch()
+                if key in (ord("q"), ord("Q")):
+                    wifi_cancel.set()
+                    device_cancel.set()
                     break
-                stdscr.addstr(y, menu_width + 2, line[: max(width - menu_width - 3, 0)])
-
-            footer = "Up/Down: navigate   r: refresh   q: quit"
-            if label == "Router Intelligence":
-                footer = "Up/Down: navigate   p: probe TCP ports   u: UPnP scan   r: refresh   q: quit"
-            elif label == "Wi-Fi Intelligence":
-                footer = "Up/Down: navigate   s: survey access points   r: refresh   q: quit"
-            elif label == "Reset Manager":
-                footer = "Up/Down: navigate   x: reset (confirmation required)   r: refresh   q: quit"
-            elif label == "Network Diagnostics":
-                footer = "Up/Down: navigate   p: ping gateway   t: trace route   d: DNS lookup   r: refresh"
-            elif label == "Settings":
-                footer = "Settings: +/- refresh interval, 0 disable, r refresh"
-            elif label == "Firewall":
-                footer = "Firewall: b block IP, u unblock IP, r refresh"
-            elif label == "Traffic Manager":
-                footer = "Traffic: l set limit, c clear limit, r refresh"
-            elif label == "Devices":
-                footer = "Devices: n discover, v service scan, e export, r refresh"
-            stdscr.addstr(height - 1, 0, footer[: max(width - 1, 0)], curses.A_DIM)
-            stdscr.refresh()
+                if key in (ord("r"), ord("R")):
+                    previous_selected = None
+                continue
 
             key = stdscr.getch()
             if key in (ord("q"), ord("Q")):
@@ -670,6 +791,59 @@ def run(stdscr) -> None:
                         firewall_message, traffic_message, device_result, device_message,
                     )
                     wifi_scan = executor.submit(_scan_wifi, wifi_cancel)
+            elif key in (ord("m"), ord("M")) and label == "Wi-Fi Intelligence":
+                if wifi_scan is not None:
+                    wifi_message = "Un sondage Wi-Fi est en cours ; réessayez après l'arrêt du sondage."
+                else:
+                    try:
+                        interfaces = wifi_intelligence.list_wireless_interfaces()
+                    except Exception as exc:  # noqa: BLE001 - surface engine errors to the operator
+                        wifi_message = f"Impossible de lister les interfaces Wi-Fi: {exc}"
+                    else:
+                        preferred = settings.load_settings()["preferred_interface"]
+                        candidates = [item.name for item in interfaces]
+                        target = (
+                            preferred
+                            if preferred in candidates
+                            else (candidates[0] if candidates else None)
+                        )
+                        if not target:
+                            wifi_message = "Aucune interface sans fil détectée."
+                        else:
+                            monitor_target = wifi_monitor_interface or next(
+                                (item.name for item in interfaces if item.mode == "monitor"),
+                                None,
+                            )
+                            if monitor_target and target == monitor_target:
+                                try:
+                                    wifi_intelligence.stop_monitor_mode(target)
+                                    if wifi_monitor_interface == target:
+                                        wifi_monitor_interface = None
+                                    wifi_message = (
+                                        f"Mode monitor arrêté sur {target}; l'interface est "
+                                        f"restaurée en mode géré."
+                                    )
+                                except Exception as exc:  # noqa: BLE001
+                                    wifi_message = f"Arrêt du mode monitor sur {target} échoué: {exc}"
+                            else:
+                                prompt = (
+                                    f"ATTENTION: passer {target} en mode monitor interrompra "
+                                    f"la connexion Wi-Fi active sur cette interface "
+                                    f"(désassociation possible). Confirmer ? (o/N) "
+                                )
+                                if _confirm_blocking(stdscr, prompt):
+                                    try:
+                                        monitor_name = wifi_intelligence.start_monitor_mode(target)
+                                        wifi_monitor_interface = monitor_name
+                                        wifi_message = (
+                                            f"Mode monitor activé sur {monitor_name} (à partir de {target}); "
+                                            f"la connexion Wi-Fi de {target} est interrompue."
+                                        )
+                                    except Exception as exc:  # noqa: BLE001
+                                        wifi_message = f"Activation du mode monitor sur {target} échouée: {exc}"
+                                else:
+                                    wifi_message = "Activation du mode monitor annulée."
+                previous_selected = None
             elif key in (ord("p"), ord("P")) and label == "Network Diagnostics":
                 if diagnostic_task is None:
                     diagnostic_message = "Pinging the configured default gateway..."
