@@ -171,7 +171,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         session.send(b"x")
         session.expect("Remove the listed NETWATCH rules?")
         session.send(b"n")
-        session.expect("Reset cancelled; no changes requested.")
+        session.expect("Reset cancelled; no changes requested")
 
         # Change a setting through the TUI and verify the persisted file.
         for _ in range(3):
