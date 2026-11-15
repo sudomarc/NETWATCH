@@ -155,7 +155,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         for _ in range(4):
             session.send(DOWN)
             time.sleep(0.03)
-        session.expect("Firewall Manager")
+        session.expect("FIREWALL MANAGER")
         session.send(b"b")
         session.expect("IPv4/IPv6 address:")
         session.send(b"192.0.2.10\n")
@@ -167,7 +167,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         for _ in range(2):
             session.send(DOWN)
             time.sleep(0.03)
-        session.expect("Read-only preview")
+        session.expect("READ-ONLY PREVIEW")
         session.send(b"x")
         session.expect("Remove the listed NETWATCH rules?")
         session.send(b"n")
@@ -177,7 +177,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         for _ in range(3):
             session.send(DOWN)
             time.sleep(0.03)
-        session.expect("Settings: +/- refresh interval")
+        session.expect("adjust refresh interval")
         session.send(b"0")
         session.expect("Automatic refresh disabled.")
 
