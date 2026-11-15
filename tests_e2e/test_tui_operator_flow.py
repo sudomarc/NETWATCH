@@ -34,7 +34,7 @@ from pathlib import Path
 name = Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ["NETWATCH_E2E_COMMAND_LOG"], "a", encoding="utf-8") as stream:
-    stream.write(json.dumps({{"name": name, "args": args}}) + "\\\\n")
+    stream.write(json.dumps({{"name": name, "args": args}}) + "\\n")
 
 if name == "ip":
     # Empty, valid iproute2 JSON for interfaces, routes and neighbors.
@@ -107,7 +107,7 @@ class _TerminalSession:
             pytest.fail(
                 f"Timed out waiting for terminal text {text!r}. "
                 f"Process status: {self.process.poll()!r}. "
-                f"Last terminal output:\\n{rendered[-3000:]}"
+                f"Last terminal output:\n{rendered[-3000:]}"
             )
 
     def close(self) -> None:
@@ -158,7 +158,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         session.expect("Firewall Manager")
         session.send(b"b")
         session.expect("IPv4/IPv6 address:")
-        session.send(b"192.0.2.10\\n")
+        session.send(b"192.0.2.10\n")
         session.expect("Block 192.0.2.10 on the forwarding path?")
         session.send(b"n")
         session.expect("Block cancelled.")
