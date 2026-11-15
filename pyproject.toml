@@ -18,4 +18,5 @@ netwatch-ng = "netwatch_ng.__main__:main"
 include = ["netwatch_ng*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests_ng"]
+testpaths = ["tests_ng", "tests_e2e"]
+markers = ["e2e: full application flows executed in a pseudo-terminal"]

@@ -240,6 +240,16 @@ bash tests/test_router.sh
 
 The firewall and IPv6 tests use mocks. They do not require a real gateway or a real firewall configuration.
 
+NETWATCH NG (Python 3) tests:
+
+```bash
+python -m pip install -e . pytest
+python -m pytest tests_ng -v
+python -m pytest tests_e2e -v
+```
+
+The NG E2E suite launches the actual TUI in a pseudo-terminal with a hermetic fake command `PATH`. Firewall mutation commands are rejected by the test doubles; no real network scan or firewall change is performed.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md). Network-control operations are intended only for systems and networks you own or are explicitly authorized to administer.
