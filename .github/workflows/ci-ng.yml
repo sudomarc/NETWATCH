@@ -2,11 +2,12 @@ name: CI (NETWATCH NG)
 
 on:
   push:
-    branches: ["main", "v2/**"]
+    branches: ["main", "v2/**", "test/**"]
   pull_request:
     paths:
       - "netwatch_ng/**"
       - "tests_ng/**"
+      - "tests_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/ci-ng.yml"
 
@@ -38,3 +39,6 @@ jobs:
 
       - name: Unit tests
         run: python -m pytest tests_ng -v
+
+      - name: End-to-end tests
+        run: python -m pytest tests_e2e -v
