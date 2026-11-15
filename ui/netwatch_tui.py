@@ -487,29 +487,57 @@ class UI:
         except curses.error:
             return False
         while True:
-            key = self.stdscr.getch()
+            key = win.getch()
             if key in (10, 13):
                 return True
             if key == 27:
                 return False
 
     def search_prompt(self) -> None:
+        """Interactive search filter line editor.
+
+        This deliberately does not use curses.echo()/getstr(): the main loop
+        runs the screen with timeout(250), and wgetstr() with a timeout set
+        returns an empty string immediately without consuming input. Every
+        character the operator typed then reached handle_key(), where digits
+        switched modes and b/u/i triggered device actions while the visible
+        prompt stayed empty. Owning the keys here keeps them out of the
+        dispatcher: printable characters edit the filter, Enter applies it and
+        Esc cancels without changing the current filter.
+        """
         h, w = self.stdscr.getmaxyx()
+        text = self.search
         try:
             curses.curs_set(1)
         except curses.error:
             pass
-        curses.echo()
         try:
-            safe_add(self.stdscr, h - 3, 2, "/ ", curses.color_pair(C["accent"]) | curses.A_BOLD)
-            raw = self.stdscr.getstr(h - 3, 4, max(1, w - 8)).decode(errors="replace")
+            while True:
+                safe_add(self.stdscr, h - 3, 2, " " * max(1, w - 4), curses.color_pair(C["muted"]))
+                safe_add(self.stdscr, h - 3, 2, f"/ {text}", curses.color_pair(C["accent"]) | curses.A_BOLD, max(1, w - 6))
+                safe_add(self.stdscr, h - 2, 2, "Enter Apply    Esc Cancel", curses.color_pair(C["muted"]), max(1, w - 4))
+                self.stdscr.refresh()
+                key = self.stdscr.getch()
+                if key == -1:
+                    continue
+                if key in (10, 13):
+                    break
+                if key == 27:
+                    return
+                if key in (curses.KEY_BACKSPACE, curses.KEY_DC, 127, 8):
+                    text = text[:-1]
+                    continue
+                if key == curses.KEY_RESIZE:
+                    h, w = self.stdscr.getmaxyx()
+                    continue
+                if 32 <= key < 127 and len(text) < 64:
+                    text += chr(key)
         finally:
-            curses.noecho()
             try:
                 curses.curs_set(0)
             except curses.error:
                 pass
-        self.search = raw.strip()
+        self.search = text.strip()
         self.selected = 0
         self.mode = "DEVICES"
 

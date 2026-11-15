@@ -9,6 +9,8 @@ LOG="$TMP/iptables.log"
 
 run_success_block(){
     source "$ROOT/netwatch.sh"
+    # Everything is mocked below; the root check is not the behaviour under test.
+    require_root(){ :; }
     iptables(){
         printf '%s\n' "$*" >> "$LOG"
         case "$1" in
@@ -40,6 +42,7 @@ if bash -c '
     export NETWATCH_CONFIG="$1"
     LOG="$2"
     source "$3"
+    require_root(){ :; }
     iptables(){
         printf "%s\n" "$*" >> "$LOG"
         case "$*" in
@@ -64,6 +67,7 @@ echo 'PASS partial firewall failure rolls back without persisted state'
 if bash -c '
     export NETWATCH_CONFIG="$1"
     source "$2"
+    require_root(){ :; }
     iptables(){
         case "$*" in
             "-S NETWATCH_BLOCK") printf "%s\n" "-A NETWATCH_BLOCK -s 192.168.1.99 -j DROP"; return 0 ;;

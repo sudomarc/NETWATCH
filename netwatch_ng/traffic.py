@@ -77,6 +77,11 @@ def _read_state() -> dict[str, Any]:
         if STATE_FILE == DEFAULT_STATE_FILE and st.st_uid != 0:
             raise PermissionError(f"traffic state is not owned by root: {STATE_FILE}")
         data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except PermissionError:
+        # PermissionError is an OSError subclass; re-raise it unchanged so the
+        # ownership/permission denial keeps its own type and message instead of
+        # being masked as a generic unreadable-state failure.
+        raise
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot read NETWATCH traffic state: {exc}") from exc
     if not isinstance(data, dict) or data.get("version") != STATE_VERSION:

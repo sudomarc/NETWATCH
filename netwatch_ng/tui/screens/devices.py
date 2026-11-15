@@ -20,8 +20,15 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
     found = devices_mod.passive_scan("inet")
 
     config_dir = get_config_dir()
-    history.save_scan(config_dir, found)
-    diff = history.diff_last_two_scans(config_dir)
+    history_warning: str | None = None
+    try:
+        history.save_scan(config_dir, found)
+        diff = history.diff_last_two_scans(config_dir)
+    except Exception as exc:
+        # A failing history cache must not take down the whole screen;
+        # the operator still sees the live inventory plus this notice.
+        diff = None
+        history_warning = f"Scan history unavailable: {exc}"
 
     display_devices = active_devices if active_devices is not None else found
     mode = "active Nmap + neighbor discovery" if active_devices is not None else "passive ARP/NDP neighbor table"
@@ -56,6 +63,9 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
             lines.append(f"  missing: {', '.join(diff.missing)}")
         if diff.reappeared:
             lines.append(f"  reappeared: {', '.join(diff.reappeared)}")
+
+    if history_warning:
+        lines.append(history_warning)
 
     if message:
         lines.extend(["", message])

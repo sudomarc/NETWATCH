@@ -71,26 +71,81 @@ def _discover_upnp_gateway():
 
 
 def _prompt_text(stdscr, prompt: str, max_length: int = 253) -> str:
+    """Owning line editor for prompted input.
+
+    This deliberately does not use echo()/getstr(): run() executes the
+    screen with stdscr.timeout(200), and wgetstr() with a timeout set
+    returns an empty byte string immediately without consuming input.
+    Every character the operator typed then reached the main dispatcher,
+    where e.g. '0' cleared the refresh interval, 'r' refreshed and 'q'
+    quit. Owning the keys here keeps them out of the dispatcher:
+    printable characters edit the text, Enter applies it and Esc cancels
+    by returning an empty string.
+    """
     height, width = stdscr.getmaxyx()
-    stdscr.move(height - 1, 0)
-    stdscr.clrtoeol()
-    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
-    curses.echo()
+    try:
+        curses.curs_set(1)
+    except curses.error:
+        pass
+    text = ""
+    try:
+        while True:
+            line = f"{prompt}{text}"
+            stdscr.move(height - 1, 0)
+            stdscr.clrtoeol()
+            stdscr.addstr(height - 1, 0, line[: max(width - 1, 0)], curses.A_BOLD)
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key == -1:
+                continue
+            if key in (10, 13):
+                return text.strip()
+            if key == 27:
+                return ""
+            if key in (curses.KEY_BACKSPACE, curses.KEY_DC, 127, 8):
+                text = text[:-1]
+                continue
+            if key == curses.KEY_RESIZE:
+                height, width = stdscr.getmaxyx()
+                continue
+            if 32 <= key < 127 and len(text) < max_length:
+                text += chr(key)
+    finally:
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+
+
+
+
+def _confirm(stdscr, prompt: str) -> bool:
+    """Blocking y/n confirmation that owns its keys.
+
+    run() keeps stdscr.timeout(200) active, so a single getch() would
+    return -1 after 200 ms and silently cancel the action before an
+    operator could answer. Loop until y/Y confirms or Esc cancels.
+    """
+    height, width = stdscr.getmaxyx()
     try:
         curses.curs_set(1)
     except curses.error:
         pass
     try:
-        raw = stdscr.getstr(height - 1, min(len(prompt), max(width - 1, 0)), max_length)
+        while True:
+            stdscr.move(height - 1, 0)
+            stdscr.clrtoeol()
+            stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key == -1:
+                continue
+            return key in (ord("y"), ord("Y"))
     finally:
-        curses.noecho()
         try:
             curses.curs_set(0)
         except curses.error:
             pass
-    return raw.decode("utf-8", errors="replace").strip()
-
-
 
 
 def _configure_colors(mode: str) -> bool:
@@ -330,10 +385,7 @@ def run(stdscr) -> None:
                     )
                 except Exception as exc:
                     router_message = f"UPnP/SSDP discovery failed: {exc}"
-                    try:
-                        activity_log.record_event("Router", "upnp_discovery", "error", str(exc))
-                    except Exception:
-                        pass
+                    router_message += _log_warning("Router", "upnp_discovery", "error", str(exc))
                 upnp_scan = None
                 if label == "Router Intelligence":
                     lines = _screen_lines(
@@ -357,10 +409,7 @@ def run(stdscr) -> None:
                         device_message = f"Service/version scan completed: {scanned_host.ip}."
                 except Exception as exc:
                     device_message = f"Service/version scan failed: {exc}"
-                    try:
-                        activity_log.record_event("Devices", "service_scan", "error", str(exc))
-                    except Exception:
-                        pass
+                    device_message += _log_warning("Devices", "service_scan", "error", str(exc))
                 else:
                     device_message += _log_warning("Devices", "service_scan", "success", device_message)
                 service_scan = None
@@ -378,10 +427,7 @@ def run(stdscr) -> None:
                     device_message = f"Active Nmap discovery completed: {len(device_result)} device(s)."
                 except Exception as exc:
                     device_message = f"Active Nmap discovery failed: {exc}"
-                    try:
-                        activity_log.record_event("Devices", "active_scan", "error", str(exc))
-                    except Exception:
-                        pass
+                    device_message += _log_warning("Devices", "active_scan", "error", str(exc))
                 else:
                     device_message += _log_warning("Devices", "active_scan", "success", device_message)
                 device_scan = None
@@ -464,12 +510,7 @@ def run(stdscr) -> None:
                 previous_selected = None
             elif key in (ord("x"), ord("X")) and label == "Reset Manager":
                 prompt = "Remove the listed NETWATCH rules? Press y to confirm; any other key cancels."
-                stdscr.move(height - 1, 0)
-                stdscr.clrtoeol()
-                stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
-                stdscr.refresh()
-                confirmation = stdscr.getch()
-                if confirmation in (ord("y"), ord("Y")):
+                if _confirm(stdscr, prompt):
                     report = reset_manager.reset_all()
                     reset_message = _reset_summary(report)
                     actions = report.firewall_actions + report.traffic_actions
@@ -551,21 +592,14 @@ def run(stdscr) -> None:
                     family = "inet6" if ":" in target else "inet"
                     action = "block" if key in (ord("b"), ord("B")) else "unblock"
                     prompt = f"{action.capitalize()} {target} on the forwarding path? Press y to confirm."
-                    stdscr.move(height - 1, 0)
-                    stdscr.clrtoeol()
-                    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
-                    stdscr.refresh()
-                    if stdscr.getch() in (ord("y"), ord("Y")):
+                    if _confirm(stdscr, prompt):
                         try:
                             changed = firewall.block_ip(target, family=family) if action == "block" else firewall.unblock_ip(target, family=family)
                             firewall_message = f"{action.capitalize()} {'applied' if changed else 'already in requested state'}: {target}"
                             firewall_message += _log_warning("Firewall", action, "success", target)
                         except Exception as exc:
                             firewall_message = f"{action.capitalize()} failed for {target}: {exc}"
-                            try:
-                                activity_log.record_event("Firewall", action, "error", str(exc))
-                            except Exception:
-                                pass
+                            firewall_message += _log_warning("Firewall", action, "error", str(exc))
                     else:
                         firewall_message = f"{action.capitalize()} cancelled."
                     previous_selected = None
@@ -584,21 +618,14 @@ def run(stdscr) -> None:
                         traffic_message += _log_warning("Traffic", "set_limit", "success", traffic_message)
                     except Exception as exc:
                         traffic_message = f"Could not set traffic limit: {exc}"
-                        try:
-                            activity_log.record_event("Traffic", "set_limit", "error", str(exc))
-                        except Exception:
-                            pass
+                        traffic_message += _log_warning("Traffic", "set_limit", "error", str(exc))
                     previous_selected = None
             elif key in (ord("c"), ord("C")) and label == "Traffic Manager":
                 interface = _prompt_text(stdscr, "Interface to clear: ", 15)
                 direction = _prompt_text(stdscr, "Direction (egress/ingress): ", 8).lower()
                 if interface and direction:
                     prompt = f"Remove NETWATCH {direction} policing on {interface}? Press y to confirm."
-                    stdscr.move(height - 1, 0)
-                    stdscr.clrtoeol()
-                    stdscr.addstr(height - 1, 0, prompt[: max(width - 1, 0)], curses.A_BOLD)
-                    stdscr.refresh()
-                    if stdscr.getch() in (ord("y"), ord("Y")):
+                    if _confirm(stdscr, prompt):
                         try:
                             removed = traffic.clear_limit(interface, direction=direction)
                             traffic_message = (
@@ -607,10 +634,7 @@ def run(stdscr) -> None:
                             traffic_message += _log_warning("Traffic", "clear_limit", "success", traffic_message)
                         except Exception as exc:
                             traffic_message = f"Could not clear traffic limit: {exc}"
-                            try:
-                                activity_log.record_event("Traffic", "clear_limit", "error", str(exc))
-                            except Exception:
-                                pass
+                            traffic_message += _log_warning("Traffic", "clear_limit", "error", str(exc))
                     else:
                         traffic_message = "Traffic limit removal cancelled."
                     previous_selected = None

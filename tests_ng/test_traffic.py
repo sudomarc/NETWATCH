@@ -16,6 +16,22 @@ def _setup(monkeypatch, tmp_path):
     return traffic
 
 
+def _seed_state(traffic, payload):
+    """Write the protected state file exactly as traffic._write_state() does.
+
+    Permissions are set explicitly (0o644) instead of relying on the process
+    umask, otherwise a permissive umask (e.g. 0002) creates a group-writable
+    file that _read_state() must refuse.
+    """
+    import os
+
+    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(traffic.STATE_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload))
+    os.chmod(traffic.STATE_FILE, 0o644)
+
+
 def test_set_limit_uses_clsact_and_preserves_root_qdisc(monkeypatch, tmp_path):
     traffic = _setup(monkeypatch, tmp_path)
     calls = []
@@ -75,8 +91,7 @@ def test_set_limit_refuses_unowned_reserved_filter(monkeypatch, tmp_path):
 
 def test_list_limits_reads_state_and_verifies_kernel_filter(monkeypatch, tmp_path):
     traffic = _setup(monkeypatch, tmp_path)
-    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    _seed_state(traffic, {"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}})
     def fake_run(argv, timeout=5.0):
         if argv[1:3] == ["qdisc", "show"]:
             return CommandResult(argv, 0, "qdisc clsact ffff: parent ffff:fff1\n", "")
@@ -88,8 +103,7 @@ def test_list_limits_reads_state_and_verifies_kernel_filter(monkeypatch, tmp_pat
 
 def test_clear_limit_deletes_only_reserved_filter_not_root_qdisc(monkeypatch, tmp_path):
     traffic = _setup(monkeypatch, tmp_path)
-    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    _seed_state(traffic, {"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}})
     calls = []
     active = True
     def fake_run(argv, timeout=5.0):
@@ -118,8 +132,7 @@ def test_set_limit_validates_interface_and_rate(monkeypatch, tmp_path):
 
 def test_list_limits_rejects_filter_with_changed_rate(monkeypatch, tmp_path):
     traffic = _setup(monkeypatch, tmp_path)
-    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    _seed_state(traffic, {"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}})
     def fake_run(argv, timeout=5.0):
         if argv[1:3] == ["qdisc", "show"]:
             return CommandResult(argv, 0, "qdisc clsact ffff: parent ffff:fff1\n", "")
@@ -131,8 +144,7 @@ def test_list_limits_rejects_filter_with_changed_rate(monkeypatch, tmp_path):
 
 def test_clear_limit_refuses_filter_with_changed_rate(monkeypatch, tmp_path):
     traffic = _setup(monkeypatch, tmp_path)
-    traffic.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    traffic.STATE_FILE.write_text(json.dumps({"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}))
+    _seed_state(traffic, {"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}})
     calls = []
     def fake_run(argv, timeout=5.0):
         calls.append(tuple(argv))
@@ -143,3 +155,30 @@ def test_clear_limit_refuses_filter_with_changed_rate(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="unverified"):
         clear_limit("eth0")
     assert not any(call[1:3] == ("filter", "del") for call in calls)
+
+
+def test_read_state_refuses_group_world_writable_state_file(monkeypatch, tmp_path):
+    """A state file writable by group or others must never be read.
+
+    This guards the permission check that a permissive umask would otherwise
+    hide: writing state with default permissions must stay unacceptable.
+    """
+    traffic = _setup(monkeypatch, tmp_path)
+    payload = {"version": 1, "limits": {"eth0:egress": {"rate_kbps": 512, "pref": 49152}}}
+    _seed_state(traffic, payload)
+    for bad_mode in (0o664, 0o646, 0o666, 0o662):
+        mode = traffic.STATE_FILE.stat().st_mode
+        traffic.STATE_FILE.chmod(bad_mode)
+        try:
+            with pytest.raises(PermissionError, match="group/world-writable"):
+                traffic._read_state()
+        finally:
+            traffic.STATE_FILE.chmod(mode)
+
+
+def test_seed_state_helper_is_not_group_or_world_writable(monkeypatch, tmp_path):
+    """The tests' own state fixture must respect the protected permission."""
+    traffic = _setup(monkeypatch, tmp_path)
+    _seed_state(traffic, {"version": 1, "limits": {}})
+    mode = traffic.STATE_FILE.stat().st_mode & 0o777
+    assert mode == 0o644, oct(mode)

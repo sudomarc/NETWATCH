@@ -44,3 +44,22 @@ def test_load_all_scans_empty_when_no_file(tmp_path):
 def test_load_all_scans_handles_corrupt_file(tmp_path):
     (tmp_path / history.HISTORY_FILENAME).write_text("not valid json {{{")
     assert history.load_all_scans(tmp_path) == []
+
+
+def test_load_all_scans_handles_valid_json_wrong_shape(tmp_path):
+    # Regression: json.loads succeeded but returned a dict/string, which
+    # crashed load_latest_devices/diff_last_two_scans with TypeError/KeyError.
+    for payload in ('{"not": "a list"}', '"just a string"', "42"):
+        (tmp_path / history.HISTORY_FILENAME).write_text(payload)
+        assert history.load_all_scans(tmp_path) == []
+        assert history.load_latest_devices(tmp_path) == []
+        assert history.diff_last_two_scans(tmp_path) is None
+
+
+def test_load_all_scans_skips_non_dict_entries(tmp_path):
+    (tmp_path / history.HISTORY_FILENAME).write_text(
+        '[{"timestamp": 1, "devices": [{"ip": "192.168.1.1"}]}, "junk", 42]\n'
+    )
+    scans = history.load_all_scans(tmp_path)
+    assert len(scans) == 1
+    assert {d.ip for d in history.load_latest_devices(tmp_path)} == {"192.168.1.1"}

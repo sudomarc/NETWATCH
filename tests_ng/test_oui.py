@@ -12,6 +12,16 @@ def test_lookup_known_prefix():
     assert oui.lookup("b8:27:eb:11:22:33") == "Raspberry Pi Foundation"
 
 
+def test_all_builtin_prefixes_are_six_hex_chars():
+    # Regression: "52540" (5 chars) could never match normalize_mac()'s
+    # 6-char output, so the QEMU/KVM entry was dead.
+    assert all(len(key) == 6 for key in oui._BUILTIN_OUI)
+
+
+def test_lookup_qemu_prefix():
+    assert oui.lookup("52:54:00:12:34:56") == "QEMU/KVM (virtual NIC)"
+
+
 def test_lookup_unknown_prefix_returns_none():
     assert oui.lookup("ff:ff:ff:11:22:33") is None
 
