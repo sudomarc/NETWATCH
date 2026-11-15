@@ -6,24 +6,28 @@ from netwatch_ng.traffic import list_limits
 
 def build_traffic_lines(message: str | None = None) -> list[str]:
     lines = [
-        "Traffic Manager",
-        "Backend: tc clsact packet policing (excess packets are dropped).",
-        "This is not smooth queue-based HTB shaping.",
+        "TRAFFIC MANAGER",
+        "",
+        "ENGINE",
+        "  Backend: tc clsact packet policing (excess packets are dropped).",
+        "  This is not smooth queue-based HTB shaping.",
+        "",
+        "POLICERS",
     ]
     try:
         limits = list_limits()
     except Exception as exc:
-        return [*lines, f"Traffic state unavailable: {exc}"]
+        return [*lines, f"  [ERROR] traffic state unavailable: {exc}"]
     if not limits:
-        lines.append("No NETWATCH-owned rate policers are currently active.")
-        lines.append("Use l to add a limit or c to clear a NETWATCH limit.")
+        lines.append("  [INFO] no NETWATCH-owned rate policers are currently active.")
+        lines.append("  l: add rate limit   c: clear rate limit   r: refresh")
         if message:
             lines.extend(["", message])
         return lines
-    lines.append("Active NETWATCH rate policers:")
+    lines.append(f"  [ACTIVE] {len(limits)} NETWATCH rate policer(s):")
     for limit in limits:
-        lines.append(f"  {limit.interface} {limit.direction}: {limit.rate_kbps} kbit/s")
+        lines.append(f"  {limit.interface:<12} {limit.direction:<10} {limit.rate_kbps} kbit/s")
     if message:
         lines.extend(["", message])
-    lines.extend(["", "l: add rate limit   c: clear rate limit"])
+    lines.extend(["", "l: add rate limit   c: clear rate limit   r: refresh"])
     return lines

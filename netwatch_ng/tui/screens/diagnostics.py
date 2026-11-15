@@ -9,21 +9,30 @@ def build_diagnostics_lines(
     result: DiagnosticResult | None = None,
     message: str | None = None,
 ) -> list[str]:
-    lines = ["Network Diagnostics"]
+    lines = ["NETWORK DIAGNOSTICS"]
     try:
         route = network.get_default_gateway("inet") or network.get_default_gateway("inet6")
     except Exception as exc:
         route = None
-        lines.append(f"Gateway inspection failed: {exc}")
+        lines.append("")
+        lines.append("GATEWAY")
+        lines.append(f"  [ERROR] gateway inspection failed: {exc}")
     if route is None:
-        lines.append("Default gateway: unavailable")
+        lines.append("")
+        lines.append("GATEWAY")
+        lines.append("  [DEGRADED] default gateway: unavailable")
     else:
-        lines.append(f"Default gateway: {route.gateway or 'unknown'} via {route.device or 'unknown'}")
+        lines.append("")
+        lines.append("GATEWAY")
+        lines.append(f"  Default gateway: [READY] {route.gateway or 'unknown'} via {route.device or 'unknown'}")
     dns = network.get_dns_servers()
-    lines.append(f"Configured DNS: {', '.join(dns) if dns else 'not found in resolv.conf'}")
+    lines.append("")
+    lines.append("DNS")
+    lines.append(f"  Configured DNS: {', '.join(dns) if dns else 'not found in resolv.conf'}")
     lines.extend([
         "",
-        "Keys: p ping the default gateway; t trace a route to a host/IP; d look up DNS for a hostname.",
+        "ACTIONS",
+        "  p ping the default gateway   t trace a route to a host/IP   d look up DNS for a hostname   r refresh",
     ])
     if result is not None:
         lines.extend(["", f"{result.name}: {result.summary}"])

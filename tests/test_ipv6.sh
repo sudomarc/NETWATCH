@@ -25,6 +25,8 @@ ip(){
     esac
 }
 cat(){ if [[ "$1" == /proc/sys/net/ipv6/conf/all/forwarding ]]; then printf '1\n'; else command cat "$@"; fi; }
+# Everything is mocked below; the root check is not the behaviour under test.
+require_root(){ :; }
 detect_ipv6(){ IFACE=eth0; GATEWAY_IPV6=2001:db8::1; }
 valid_ipv6 2001:db8::10 >/dev/null || { echo 'FAIL valid IPv6'; exit 1; }
 ! valid_ipv6 not-an-ip >/dev/null || { echo 'FAIL invalid IPv6 accepted'; exit 1; }

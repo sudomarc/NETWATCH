@@ -68,31 +68,41 @@ def load_all_scans(config_dir: Path) -> list[dict]:
     if not path.exists():
         return []
     try:
-        return json.loads(path.read_text())
+        payload = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return []
+    if not isinstance(payload, list):
+        return []
+    return [scan for scan in payload if isinstance(scan, dict)]
+
+
+def _scan_devices(scan: dict) -> list:
+    devices = scan.get("devices")
+    if not isinstance(devices, list):
+        return []
+    return [d for d in devices if isinstance(d, dict) and "ip" in d]
 
 
 def load_latest_devices(config_dir: Path) -> list[Device]:
     scans = load_all_scans(config_dir)
     if not scans:
         return []
-    return [_dict_to_device(d) for d in scans[-1]["devices"]]
+    return [_dict_to_device(d) for d in _scan_devices(scans[-1])]
 
 
 def diff_last_two_scans(config_dir: Path) -> ScanDiff | None:
-    scans = load_all_scans(config_dir)
+    scans = [scan for scan in load_all_scans(config_dir) if isinstance(scan.get("devices"), list)]
     if len(scans) < 2:
         return None
 
-    current_ips = {d["ip"] for d in scans[-1]["devices"]}
-    previous_ips = {d["ip"] for d in scans[-2]["devices"]}
+    current_ips = {d["ip"] for d in _scan_devices(scans[-1])}
+    previous_ips = {d["ip"] for d in _scan_devices(scans[-2])}
 
     # "reappeared" = seen at some point before the previous scan, absent
     # from the previous scan, present now.
     ever_seen_before_previous: set[str] = set()
     for scan in scans[:-2]:
-        ever_seen_before_previous |= {d["ip"] for d in scan["devices"]}
+        ever_seen_before_previous |= {d["ip"] for d in _scan_devices(scan)}
 
     new = sorted(current_ips - previous_ips)
     missing = sorted(previous_ips - current_ips)

@@ -1,46 +1,85 @@
-"""Linux Wi-Fi inventory and operator-triggered access-point survey via iw."""
+"""Linux Wi-Fi inventory and operator-triggered survey via the Aircrack-ng suite.
+
+This module replaces the previous iw/rfkill-based implementation:
+
+* interface detection and monitor-mode handling rely on ``airmon-ng``;
+* access-point and station discovery rely on ``airodump-ng`` in CSV output
+  mode, run for a bounded operator-controlled duration.
+
+The perimeter is interface management and passive Wi-Fi discovery only:
+no key is cracked, no frame is injected and no station is deauthenticated.
+``airmon-ng check kill`` is never run automatically, as it can interrupt the
+machine's connectivity.
+"""
 
 from __future__ import annotations
 
+import csv
+import io
 import re
+import subprocess
+import tempfile
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
-from netwatch_ng.core.shell import run, run_cancellable
+from netwatch_ng.core.shell import BinaryNotFound, CommandCancelled, run, run_cancellable
+
+AIRMON_NG = "airmon-ng"
+AIRODUMP_NG = "airodump-ng"
 
 _INTERFACE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,15}$")
 _PHY_NAME = re.compile(r"^phy\d+$")
-_PHY_RE = re.compile(r"^\s*phy#(\d+)\s*$")
-_INTERFACE_RE = re.compile(r"^\s*Interface\s+(\S+)\s*$")
-_ADDRESS_RE = re.compile(r"^\s*addr\s+(\S+)\s*$")
-_TYPE_RE = re.compile(r"^\s*type\s+(\S+)\s*$")
-_CHANNEL_RE = re.compile(
-    r"^\s*channel\s+(\d+)\s+\((\d+)\s+MHz\)", re.MULTILINE
+_MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
+_AIRMON_TABLE_RE = re.compile(
+    r"^(?P<phy>\S+)\s+(?P<interface>\S+)\s+(?P<driver>\S+)\s+(?P<chipset>.*)$"
 )
-_BSS_RE = re.compile(r"^BSS\s+([0-9a-fA-F:]{17})(?:\s+\(on\s+[^)]+\))?")
-_FREQUENCY_RE = re.compile(r"^\s*freq:\s*(\d+)\s*$", re.MULTILINE)
-_SIGNAL_RE = re.compile(r"^\s*signal:\s*(-?\d+(?:\.\d+)?)\s*dBm\s*$", re.MULTILINE)
-_SSID_RE = re.compile(r"^\s*SSID:[ \t]?(.*)$", re.MULTILINE)
+_MONITOR_ENABLED_RE = re.compile(
+    r"mac80211 monitor mode vif enabled for \[[^\]]+\](?P<iface>[^\s)]+) "
+    r"on \[[^\]]+\](?P<monitor>[^\s)]+)"
+)
+_MONITOR_ALREADY_RE = re.compile(
+    r"mac80211 monitor mode already enabled for \[[^\]]+\](?P<iface>[^\s)]+) "
+    r"on \[[^\]]+\](?P<monitor>[^\s)]+)"
+)
+_MONITOR_DISABLED_RE = re.compile(r"mac80211 monitor mode vif disabled for")
+
+# nl80211 interface types exposed through /sys/class/net/<interface>/type.
+_TYPE_MANAGED = "1"
+_TYPE_MONITOR = "803"
+
+_SYS_CLASS_NET = Path("/sys/class/net")
 
 
 @dataclass
 class WirelessInterface:
+    """A wireless interface as reported by airmon-ng plus kernel state."""
+
     name: str
     phy: str | None
-    interface_type: str | None
+    driver: str | None
+    chipset: str | None
+    mode: str  # "managed", "monitor" or "unknown"
     mac: str | None
-    channel: int | None
-    frequency_mhz: int | None
 
 
 @dataclass
 class RadioState:
+    """Aggregate Wi-Fi radio block state.
+
+    Aircrack-ng does not report rfkill soft/hard block state, so both fields
+    are ``None`` (information indisponible via ce moteur). Consultez rfkill
+    directement pour cet état.
+    """
+
     soft_blocked: bool | None
     hard_blocked: bool | None
 
 
 @dataclass
 class AccessPoint:
+    """An access point observed by airodump-ng."""
+
     ssid: str
     bssid: str
     frequency_mhz: int | None
@@ -49,176 +88,361 @@ class AccessPoint:
     advertised_security: str
 
 
+@dataclass
+class Station:
+    """A client station observed by airodump-ng."""
+
+    bssid: str  # associated AP BSSID, or "(not associated)"
+    station: str
+    signal_dbm: float | None
+    rate: str | None
+    lost: int | None
+    frames: int | None
+    probes: str | None
+
+
+@dataclass
+class WifiSurvey:
+    """Result of one operator-triggered airodump-ng survey."""
+
+    interface: str
+    access_points: list[AccessPoint]
+    stations: list[Station]
+
+
+def _interface_property(interface: str, file_name: str) -> str | None:
+    """Read a /sys/class/net/<interface> attribute without ever crashing."""
+    try:
+        value = (
+            (_SYS_CLASS_NET / interface / file_name)
+            .read_text(encoding="ascii", errors="replace")
+            .strip()
+        )
+    except OSError:
+        return None
+    return value or None
+
+
+def _interface_mode(interface: str) -> str:
+    """Current interface type read from kernel state (not from iw)."""
+    raw = _interface_property(interface, "type")
+    if raw == _TYPE_MONITOR:
+        return "monitor"
+    if raw == _TYPE_MANAGED:
+        return "managed"
+    if raw is not None:
+        return f"unknown ({raw})"
+    return "unknown"
+
+
+def _interface_mac(interface: str) -> str | None:
+    return _interface_property(interface, "address")
+
+
 def list_wireless_interfaces() -> list[WirelessInterface]:
-    """Return wireless interfaces reported by `iw dev`."""
-    result = run(["iw", "dev"], timeout=5.0)
+    """Return wireless interfaces reported by ``airmon-ng``.
+
+    ``airmon-ng`` requires root privileges; without them it exits with a
+    permission error that is surfaced explicitly. Interface modes come from
+    kernel state (``/sys/class/net/<iface>/type``), not from iw.
+    """
+    result = run([AIRMON_NG], timeout=10.0)
     if not result.ok:
-        raise RuntimeError(f"iw dev failed: {result.stderr.strip()}")
+        detail = (
+            result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+        )
+        raise RuntimeError(f"airmon-ng failed: {detail}")
 
     interfaces: list[WirelessInterface] = []
-    phy: str | None = None
-    current: WirelessInterface | None = None
     for line in result.stdout.splitlines():
-        match = _PHY_RE.match(line)
-        if match:
-            phy = f"phy{match.group(1)}"
+        match = _AIRMON_TABLE_RE.match(line)
+        if not match:
             continue
-        match = _INTERFACE_RE.match(line)
-        if match:
-            current = WirelessInterface(
-                name=match.group(1),
-                phy=phy,
-                interface_type=None,
-                mac=None,
-                channel=None,
-                frequency_mhz=None,
+        name = match.group("interface")
+        if name in ("Interface", "") or match.group("phy") in ("PHY", ""):
+            continue  # header line
+        interfaces.append(
+            WirelessInterface(
+                name=name,
+                phy=match.group("phy") or None,
+                driver=match.group("driver") or None,
+                chipset=(match.group("chipset") or "").strip() or None,
+                mode=_interface_mode(name),
+                mac=_interface_mac(name),
             )
-            interfaces.append(current)
-            continue
-        if current is None:
-            continue
-        if match := _ADDRESS_RE.match(line):
-            current.mac = match.group(1)
-        elif match := _TYPE_RE.match(line):
-            current.interface_type = match.group(1)
-        elif match := _CHANNEL_RE.match(line):
-            current.channel = int(match.group(1))
-            current.frequency_mhz = int(match.group(2))
+        )
     return interfaces
 
 
 def get_radio_state() -> RadioState:
-    """Return the aggregate Wi-Fi soft/hard block state reported by rfkill."""
-    result = run(["rfkill", "list", "wifi"], timeout=5.0)
-    if not result.ok:
-        raise RuntimeError(f"rfkill list wifi failed: {result.stderr.strip()}")
-    soft: list[bool] = []
-    hard: list[bool] = []
-    for line in result.stdout.splitlines():
-        match = re.match(r"\s*Soft blocked:\s*(yes|no)\s*$", line, re.IGNORECASE)
-        if match:
-            soft.append(match.group(1).lower() == "yes")
-        match = re.match(r"\s*Hard blocked:\s*(yes|no)\s*$", line, re.IGNORECASE)
-        if match:
-            hard.append(match.group(1).lower() == "yes")
-    return RadioState(
-        soft_blocked=any(soft) if soft else None,
-        hard_blocked=any(hard) if hard else None,
-    )
+    """Return the radio block state.
+
+    Aircrack-ng does not expose rfkill soft/hard block state; both fields are
+    ``None``. This is deliberate: the engine does not silently fall back to
+    rfkill. Operators who need block state should consult rfkill directly.
+    """
+    return RadioState(soft_blocked=None, hard_blocked=None)
 
 
 def get_supported_modes(phy: str) -> list[str]:
-    """Return supported interface modes for one wireless PHY reported by iw."""
-    if not _PHY_NAME.fullmatch(phy):
+    """Return the interface modes supported on one PHY.
+
+    Aircrack-ng has no equivalent of ``iw phy <phy> info``; the list of
+    supported modes is not available via this engine and is reported as such
+    (empty list) rather than faked. The PHY name is still validated so an
+    operator cannot inject shell metacharacters through this entry point.
+    """
+    if not isinstance(phy, str) or not _PHY_NAME.fullmatch(phy):
         raise ValueError(f"invalid wireless PHY name: {phy!r}")
-    result = run(["iw", "phy", phy, "info"], timeout=5.0)
-    if not result.ok:
-        raise RuntimeError(f"iw phy {phy} info failed: {result.stderr.strip()}")
-
-    modes: list[str] = []
-    in_modes = False
-    for line in result.stdout.splitlines():
-        if line.strip() == "Supported interface modes:":
-            in_modes = True
-            continue
-        if not in_modes:
-            continue
-        match = re.match(r"^\s*\*\s+(.+?)\s*$", line)
-        if match:
-            modes.append(match.group(1))
-        elif line.strip():
-            break
-    return modes
+    return []
 
 
-def _channel_for_frequency(frequency_mhz: int) -> int | None:
-    if frequency_mhz == 2484:
-        return 14
-    if 2412 <= frequency_mhz <= 2472:
-        return (frequency_mhz - 2407) // 5
-    if 5000 <= frequency_mhz < 5925:
-        return (frequency_mhz - 5000) // 5
-    if 5955 <= frequency_mhz <= 7115:
-        return (frequency_mhz - 5950) // 5
+def start_monitor_mode(interface: str, channel: int | None = None) -> str:
+    """Put an interface in monitor mode with ``airmon-ng start``.
+
+    Returns the name of the monitor interface created (for example
+    ``wlan0mon``), parsed from the real ``airmon-ng`` output.
+
+    This is an explicit operator action: it can interrupt the active Wi-Fi
+    connection of the interface. ``airmon-ng check kill`` is never run.
+    """
+    if not _INTERFACE_NAME.fullmatch(interface):
+        raise ValueError(f"invalid wireless interface name: {interface!r}")
+    argv = [AIRMON_NG, "start", interface]
+    if channel is not None:
+        if not isinstance(channel, int) or channel <= 0:
+            raise ValueError("channel must be a positive integer")
+        argv.append(str(channel))
+    result = run(argv, timeout=20.0)
+    output = result.stdout + "\n" + result.stderr
+    match = _MONITOR_ENABLED_RE.search(output) or _MONITOR_ALREADY_RE.search(output)
+    if match:
+        return match.group("monitor")
+    detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+    raise RuntimeError(f"could not enable monitor mode on {interface}: {detail}")
+
+
+def stop_monitor_mode(interface: str) -> None:
+    """Stop monitor mode on an interface with ``airmon-ng stop``.
+
+    The monitor virtual interface is removed and the underlying interface is
+    restored to managed mode when the driver supports it.
+    """
+    if not _INTERFACE_NAME.fullmatch(interface):
+        raise ValueError(f"invalid wireless interface name: {interface!r}")
+    result = run([AIRMON_NG, "stop", interface], timeout=20.0)
+    output = result.stdout + "\n" + result.stderr
+    if result.returncode == 0 and _MONITOR_DISABLED_RE.search(output):
+        return
+    detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+    raise RuntimeError(f"could not stop monitor mode on {interface}: {detail}")
+
+
+def _frequency_for_channel(channel: int) -> int | None:
+    """Derive the center frequency (MHz) from a 2.4 GHz / 5 GHz channel number.
+
+    airodump-ng's CSV does not carry the band, so 6 GHz channels overlap with
+    2.4 GHz channel numbers and cannot be disambiguated: they are reported as
+    unavailable here.
+    """
+    if 1 <= channel <= 13:
+        return 2407 + channel * 5
+    if channel == 14:
+        return 2484
+    if 34 <= channel <= 165:
+        return 5000 + channel * 5
     return None
 
 
-def _parse_access_point(block: str) -> AccessPoint | None:
-    bss = _BSS_RE.search(block)
-    if not bss:
+def _security_label(enc: str, cipher: str, auth: str) -> str:
+    """Build a human security label from airodump-ng ENC/CIPHER/AUTH fields."""
+    enc = (enc or "").strip().upper()
+    cipher = (cipher or "").strip()
+    auth = (auth or "").strip()
+    extras = [part for part in (cipher, auth) if part and part not in ("-", "OPN")]
+    if not enc or enc in ("-", "OPN"):
+        return "Open" if not extras else f"Open ({' / '.join(extras)})"
+    if enc == "WEP":
+        return "WEP" if not extras else f"WEP ({' / '.join(extras)})"
+    label = enc
+    if extras:
+        label += f" ({' / '.join(extras)})"
+    return label
+
+
+def _parse_access_point_row(row: list[str]) -> AccessPoint | None:
+    if len(row) < 11:
         return None
-    frequency_match = _FREQUENCY_RE.search(block)
-    signal_match = _SIGNAL_RE.search(block)
-    ssid_match = _SSID_RE.search(block)
-    frequency = int(frequency_match.group(1)) if frequency_match else None
-    security_markers = []
-    if re.search(r"^\s*RSN:", block, re.MULTILINE):
-        security_markers.append("RSN")
-    if re.search(r"^\s*WPA:", block, re.MULTILINE):
-        security_markers.append("WPA")
-    if security_markers:
-        security = "/".join(security_markers) + " advertised"
-    elif re.search(r"^\s*capability:.*\bPrivacy\b", block, re.MULTILINE):
-        security = "legacy privacy advertised"
-    else:
-        security = "no encryption advertised"
+    bssid = row[0].strip()
+    if not _MAC_RE.match(bssid):
+        return None
+    channel_raw = row[5].strip() if len(row) > 5 else ""
+    try:
+        channel = int(channel_raw) if channel_raw and channel_raw != "-1" else None
+    except ValueError:
+        channel = None
+    signal_raw = row[1].strip() if len(row) > 1 else ""
+    try:
+        signal = float(signal_raw) if signal_raw and signal_raw != "-1" else None
+    except ValueError:
+        signal = None
+    essid = row[10].strip() if len(row) > 10 else ""
+    enc = row[7].strip() if len(row) > 7 else ""
+    cipher = row[8].strip() if len(row) > 8 else ""
+    auth = row[9].strip() if len(row) > 9 else ""
+    frequency = _frequency_for_channel(channel) if channel is not None else None
     return AccessPoint(
-        ssid=ssid_match.group(1) if ssid_match else "",
-        bssid=bss.group(1).lower(),
+        ssid=essid,
+        bssid=bssid.lower(),
         frequency_mhz=frequency,
-        channel=_channel_for_frequency(frequency) if frequency else None,
-        signal_dbm=float(signal_match.group(1)) if signal_match else None,
-        advertised_security=security,
+        channel=channel,
+        signal_dbm=signal,
+        advertised_security=_security_label(enc, cipher, auth),
     )
 
 
-def parse_scan_output(output: str) -> list[AccessPoint]:
-    """Parse `iw dev <interface> scan` output without claiming verification."""
-    blocks = re.split(r"(?m)^(?=BSS\s)", output)
-    access_points = [_parse_access_point(block) for block in blocks if block.strip()]
-    return [access_point for access_point in access_points if access_point is not None]
+def _parse_station_row(row: list[str]) -> Station | None:
+    if len(row) < 7:
+        return None
+    station = row[1].strip()
+    if not _MAC_RE.match(station):
+        return None
+    bssid = row[0].strip()
+    signal_raw = row[2].strip() if len(row) > 2 else ""
+    try:
+        signal = float(signal_raw) if signal_raw and signal_raw != "-1" else None
+    except ValueError:
+        signal = None
+    rate = row[3].strip() if len(row) > 3 else "" or None
+    lost_raw = row[4].strip() if len(row) > 4 else ""
+    try:
+        lost = int(lost_raw) if lost_raw else None
+    except ValueError:
+        lost = None
+    frames_raw = row[5].strip() if len(row) > 5 else ""
+    try:
+        frames = int(frames_raw) if frames_raw else None
+    except ValueError:
+        frames = None
+    probes = row[6].strip() if len(row) > 6 else "" or None
+    return Station(
+        bssid=bssid or "(not associated)",
+        station=station.lower(),
+        signal_dbm=signal,
+        rate=rate,
+        lost=lost,
+        frames=frames,
+        probes=probes,
+    )
+
+
+def parse_airodump_csv(
+    text: str,
+) -> tuple[list[AccessPoint], list[Station]]:
+    """Parse ``airodump-ng --output-format csv`` output without claiming verification.
+
+    The output holds an access-point section (header ``BSSID, PWR, ... ESSID``)
+    followed by a station section (header ``BSSID, STATION, ...``). Malformed
+    rows are skipped; the parse never crashes on unexpected input.
+    """
+    access_points: list[AccessPoint] = []
+    stations: list[Station] = []
+    section: str | None = None
+    for row in csv.reader(io.StringIO(text)):
+        if not row or all(not cell.strip() for cell in row):
+            continue
+        first = row[0].strip()
+        second = row[1].strip() if len(row) > 1 else ""
+        if first == "BSSID" and second == "PWR":
+            section = "access_points"
+            continue
+        if first == "BSSID" and second == "STATION":
+            section = "stations"
+            continue
+        if section == "access_points":
+            point = _parse_access_point_row(row)
+            if point is not None:
+                access_points.append(point)
+        elif section == "stations":
+            station = _parse_station_row(row)
+            if station is not None:
+                stations.append(station)
+    return access_points, stations
+
+
+def _read_latest_airodump_csv(directory: str, prefix: str = "scan-") -> str:
+    """Return the text of the most recent airodump-ng CSV file, or ``""``."""
+    candidates = sorted(Path(directory).glob(f"{prefix}*.csv"))
+    if not candidates:
+        return ""
+    return candidates[-1].read_text(encoding="utf-8", errors="replace")
 
 
 def scan_networks(
     interface: str,
     timeout: float = 30.0,
     cancel_event: threading.Event | None = None,
-) -> list[AccessPoint]:
-    """Perform an operator-requested survey on one local wireless interface."""
+) -> WifiSurvey:
+    """Passively survey one interface with ``airodump-ng`` in CSV mode.
+
+    ``airodump-ng`` captures until it is stopped, so the operator timeout (or
+    cancellation) ends the capture normally: partial CSV output written before
+    the stop is parsed and returned. A positive exit code (for example missing
+    root privileges) is a real failure.
+    """
     if not _INTERFACE_NAME.fullmatch(interface):
         raise ValueError(f"invalid wireless interface name: {interface!r}")
     if timeout <= 0:
         raise ValueError("timeout must be positive")
-    result = (
-        run(["iw", "dev", interface, "scan"], timeout=timeout)
-        if cancel_event is None
-        else run_cancellable(
-            ["iw", "dev", interface, "scan"],
-            timeout=timeout,
-            cancel_event=cancel_event,
+
+    with tempfile.TemporaryDirectory(prefix="netwatch-ng-airodump-") as directory:
+        prefix = str(Path(directory) / "scan")
+        argv = [
+            AIRODUMP_NG,
+            "--output-format",
+            "csv",
+            "--write-interval",
+            "1",
+            "--write",
+            prefix,
+            interface,
+        ]
+        result = None
+        try:
+            result = run_cancellable(argv, timeout=timeout, cancel_event=cancel_event)
+        except subprocess.TimeoutExpired:
+            # airodump-ng runs until stopped: a timeout is a normal stop.
+            result = None
+        except CommandCancelled:
+            # Operator cancellation: parse whatever was written before the stop.
+            result = None
+
+        if result is not None and result.returncode > 0:
+            detail = (
+                result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+            )
+            raise RuntimeError(f"airodump-ng survey failed on {interface}: {detail}")
+
+        text = _read_latest_airodump_csv(directory)
+        access_points, stations = parse_airodump_csv(text)
+        return WifiSurvey(
+            interface=interface, access_points=access_points, stations=stations
         )
-    )
-    if not result.ok:
-        detail = result.stderr.strip() or "scan command returned a failure status"
-        raise RuntimeError(f"Wi-Fi scan failed on {interface}: {detail}")
-    return parse_scan_output(result.stdout)
 
 
 def scan_available_networks(
     timeout: float = 30.0,
     cancel_event: threading.Event | None = None,
-) -> tuple[str, list[AccessPoint]]:
-    """Survey using the first managed wireless interface reported by `iw`."""
+) -> WifiSurvey:
+    """Survey the first wireless interface reported by ``airmon-ng``.
+
+    Monitor mode is recommended for complete results; a survey on a managed
+    interface only sees the beacons that interface receives.
+    """
     interfaces = list_wireless_interfaces()
     if not interfaces:
-        raise RuntimeError("no wireless interface is reported by iw")
-    interface = next(
-        (item for item in interfaces if item.interface_type == "managed"),
-        interfaces[0],
-    ).name
-    return interface, scan_networks(
-        interface, timeout=timeout, cancel_event=cancel_event
-    )
+        raise RuntimeError("no wireless interface is detected by airmon-ng")
+    return scan_networks(interfaces[0].name, timeout=timeout, cancel_event=cancel_event)
 
 
 def channel_occupancy(access_points: list[AccessPoint]) -> dict[int, int]:

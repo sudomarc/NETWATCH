@@ -29,7 +29,10 @@ def test_reset_screen_never_calls_destructive_reset(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError("screen triggered reset")),
     )
     lines = reset_screen.build_reset_lines()
-    assert any("Read-only preview" in line for line in lines)
+    text = "\n".join(lines)
+    assert any("No changes have been made" in line for line in lines)
+    assert "preview" in text.lower()
+    assert "reset" in text.lower()
 
 
 def test_reset_firewall_does_not_delete_other_chains(monkeypatch):

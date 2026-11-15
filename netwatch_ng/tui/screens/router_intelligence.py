@@ -18,35 +18,42 @@ def build_router_lines(
         if report is None:
             report = inspect_default_gateway()
     except Exception as exc:
-        return [f"Router inspection failed: {exc}"]
+        return [f"ROUTER INTELLIGENCE", "", f"  [ERROR] router inspection failed: {exc}"]
 
     if report is None:
         return [
-            "Router Intelligence",
-            "No default IPv4 or IPv6 gateway is configured.",
+            "ROUTER INTELLIGENCE",
+            "",
+            "GATEWAY",
+            "  [DEGRADED] no default IPv4 or IPv6 gateway is configured.",
         ]
 
     lines = [
-        "Router Intelligence (local route and neighbor-table evidence)",
-        f"  Gateway: {report.gateway} ({report.family})",
+        "ROUTER INTELLIGENCE",
+        "",
+        "GATEWAY",
+        f"  Gateway: [READY] {report.gateway} ({report.family})",
         f"  Interface: {report.interface or 'unknown'}",
         f"  Gateway MAC: {report.mac or 'not present in neighbor table'}",
-        (
+    ]
+    if report.manufacturer:
+        lines.append(
             f"  Manufacturer hint: {report.manufacturer} "
             "(local OUI match; model/firmware unverified)"
-            if report.manufacturer
-            else "  Manufacturer hint: unavailable (no local OUI match)"
-        ),
-        f"  Local interface addresses: {', '.join(report.local_addresses) or 'unavailable'}",
-        "  SNMP discovery is not implemented; press u for a read-only UPnP/SSDP check.",
-        "",
-    ]
-    if services is None:
-        lines.append("Press p to check common TCP management ports on this gateway.")
+        )
     else:
-        lines.append("Management port reachability (not service/version verification):")
+        lines.append("  Manufacturer hint: unavailable (no local OUI match)")
+    lines.append(f"  Local interface addresses: {', '.join(report.local_addresses) or 'unavailable'}")
+    lines.append("")
+    lines.append("MANAGEMENT PORTS")
+    if services is None:
+        lines.append("  [INFO] press p to check common TCP management ports on this gateway.")
+        lines.append("         u: read-only UPnP/SSDP check   r: refresh")
+    else:
+        lines.append(f"  TCP management port reachability ({len(services)} port(s)):")
         for service in services:
-            lines.append(f"  TCP/{service.port} {service.name}: {service.state}")
+            lines.append(f"    TCP/{service.port} {service.name}: {service.state}")
+        lines.append("  These are reachability checks, not service/version verification.")
     if message:
         lines.extend(["", message])
     return lines

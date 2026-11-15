@@ -23,7 +23,11 @@ Current NG capabilities:
   device description is fetched only from that same literal IP. SNMP and
   deeper vendor/model/firmware fingerprinting are not implemented.
 - Wi-Fi radio inventory and operator-triggered access-point survey through
-  `iw`. Aircrack-ng audit actions and client capture are not implemented.
+  the Aircrack-ng suite (`airmon-ng` for interfaces and monitor mode,
+  `airodump-ng` for the survey). Monitor mode is an explicit operator action
+  requiring root privileges; it can interrupt the active Wi-Fi connection.
+  `airmon-ng check kill` is never run automatically. Key cracking, frame
+  injection and station deauthentication are not implemented.
 - IPv4/IPv6 single-IP block/unblock through NETWATCH-owned iptables rules on
   the FORWARD chain. This affects forwarded traffic only; it is not a
   universal way to block a device on the same LAN.
@@ -88,6 +92,11 @@ For IPv4 firewall control: Bash, `iptables`, `ip`, `awk`, `python3`. `arpspoof` 
 For IPv6 control: Bash, `ip`, `ip6tables`, `awk`, `python3`; `nmap` is needed for identification.
 
 For the router bridge: OpenSSH client.
+
+For NETWATCH NG Wi-Fi (airmon-ng / airodump-ng): the `aircrack-ng` system
+package (provides `airmon-ng` and `airodump-ng`). Monitor mode and the survey
+require root privileges; `aircrack-ng` is a system executable detected at
+runtime, not a Python dependency.
 
 Debian/Ubuntu example:
 

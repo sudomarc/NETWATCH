@@ -46,7 +46,7 @@ _BUILTIN_OUI: dict[str, str] = {
     "080027": "Oracle VirtualBox (virtual NIC)",
     "000C29": "VMware (virtual NIC)",
     "005056": "VMware (virtual NIC)",
-    "52540": "QEMU/KVM (virtual NIC)",
+    "525400": "QEMU/KVM (virtual NIC)",
     "001124": "Apple",
     "F0DBF8": "Apple",
     "A4C361": "Apple",
