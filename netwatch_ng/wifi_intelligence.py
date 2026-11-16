@@ -69,8 +69,8 @@ class RadioState:
     """Aggregate Wi-Fi radio block state.
 
     Aircrack-ng does not report rfkill soft/hard block state, so both fields
-    are ``None`` (information indisponible via ce moteur). Consultez rfkill
-    directement pour cet état.
+    are ``None`` (information not available via this engine). Consult rfkill
+    directly for this state.
     """
 
     soft_blocked: bool | None

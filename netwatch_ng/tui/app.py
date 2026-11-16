@@ -598,7 +598,7 @@ def run(stdscr) -> None:
                         firewall_message, traffic_message, device_result, device_message,
                     )
 
-            # --- Rendu (toute erreur d'affichage est dégradée, jamais fatale) ---
+            # --- Rendering (any display error is degraded, never fatal) ---
             try:
                 _draw_header(stdscr, height, width, MENU[selected][0], colors_enabled)
                 _draw_menu(stdscr, height, selected, colors_enabled)
@@ -606,13 +606,13 @@ def run(stdscr) -> None:
                 _draw_footer(stdscr, height, width, label, colors_enabled)
                 stdscr.refresh()
             except Exception as exc:
-                # Dernier ressort: effacer et afficher l'erreur pour que le TUI
-                # ne quitte jamais brutalement sur un terminal capricieux.
+                # Last resort: clear and display the error so the TUI never
+                # exits abruptly on a fickle terminal.
                 try:
                     stdscr.erase()
-                    stdscr.addstr(0, 0, "NETWATCH NG — erreur d'affichage:", curses.A_BOLD)
+                    stdscr.addstr(0, 0, "NETWATCH NG — display error:", curses.A_BOLD)
                     stdscr.addstr(1, 0, str(exc)[: max(width - 1, 0)])
-                    stdscr.addstr(3, 0, "Appuyez sur q pour quitter, r pour réessayer.", curses.A_DIM)
+                    stdscr.addstr(3, 0, "Press q to quit, r to retry.", curses.A_DIM)
                     stdscr.refresh()
                 except Exception:
                     pass

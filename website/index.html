@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NETWATCH NG — Network monitoring and gateway administration for Linux</title>
+<meta name="description" content="NETWATCH NG is a Python 3 TUI/CLI tool for Linux network monitoring, analysis and diagnostics: device discovery, Wi-Fi, firewall, traffic and diagnostics.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B7A5B'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23F4F7F5' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23F4F7F5'/%3E%3Cpath d='M16 16 L23 11' stroke='%23F4F7F5' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- ============ NAVBAR ============ -->
+<header class="nav-header" id="top">
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="NETWATCH NG — back to top">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="var(--accent)"/>
+        <circle cx="16" cy="16" r="9" fill="none" stroke="#F4F7F5" stroke-width="2"/>
+        <circle cx="16" cy="16" r="3.2" fill="#F4F7F5"/>
+        <path d="M16 16 L23.5 10.5" stroke="#F4F7F5" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">NETWATCH <span class="brand-ng">NG</span></span>
+    </a>
+    <nav class="nav-main" aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#demo">Demonstration</a>
+      <a href="#security">Security</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/sudomarc/NETWATCH" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="btn btn-ghost" href="https://github.com/sudomarc/NETWATCH/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+      <a class="btn btn-primary" href="#installation">Installation</a>
+      <button class="nav-burger" id="navBurger" aria-expanded="false" aria-controls="navMainMobile" aria-label="Open menu">
+        <span></span><span></span>
+      </button>
+    </div>
+  </div>
+  <div class="nav-mobile" id="navMainMobile" hidden>
+    <a href="#features">Features</a>
+    <a href="#demo">Demonstration</a>
+    <a href="#security">Security</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/sudomarc/NETWATCH" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/sudomarc/NETWATCH/blob/main/README.md" target="_blank" rel="noopener">Documentation</a>
+  </div>
+</header>
+
+<!-- ============ BREADCRUMB ============ -->
+<div class="breadcrumb-bar">
+  <div class="container breadcrumb-inner">
+    <nav aria-label="Breadcrumb" class="breadcrumb">
+      <a href="https://github.com/sudomarc/NETWATCH" target="_blank" rel="noopener">Network tools</a>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span aria-current="page">NETWATCH NG</span>
+    </nav>
+    <span class="breadcrumb-version">v2.0.0-1 · published APT repository</span>
+  </div>
+</div>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy reveal">
+        <h1 class="hero-title">NETWATCH NG</h1>
+        <p class="hero-sub">Supervise your network from the terminal: device discovery, Wi-Fi analysis, firewall, diagnostics and activity log, in a keyboard-driven terminal interface built for Linux.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary btn-lg" href="#installation">Install via APT</a>
+          <a class="btn btn-secondary btn-lg" href="https://github.com/sudomarc/NETWATCH/blob/main/README.md" target="_blank" rel="noopener">Read the documentation
+            <svg class="ext-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3L7 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M11 9v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </a>
+        </div>
+        <p class="hero-note">Linux amd64 · Debian and antiX · <code>netwatch-ng</code> package 2.0.0-1 available</p>
+      </div>
+
+      <div class="hero-visual reveal" aria-hidden="true">
+        <div class="tui-window" role="img" aria-label="Preview of the NETWATCH NG TUI interface">
+          <div class="tui-chrome">
+            <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+            <span class="tui-chrome-title">marco@debian — netwatch-ng</span>
+          </div>
+          <div class="tui-screen">
+            <div class="tui-header">
+              <span class="tui-app">NETWATCH NG</span><span class="tui-ver">v2.0.0</span>
+              <span class="tui-mode">[Dashboard]&nbsp;&nbsp;root:yes</span>
+            </div>
+            <div class="tui-body">
+              <div class="tui-menu" id="tuiMenu">
+                <span class="mi sel">&gt; Dashboard</span>
+                <span class="mi">&nbsp;&nbsp;Devices</span>
+                <span class="mi">&nbsp;&nbsp;Router Intelligence</span>
+                <span class="mi">&nbsp;&nbsp;Wi-Fi Intelligence</span>
+                <span class="mi">&nbsp;&nbsp;Firewall</span>
+                <span class="mi">&nbsp;&nbsp;Traffic Manager</span>
+                <span class="mi">&nbsp;&nbsp;Reset Manager</span>
+                <span class="mi">&nbsp;&nbsp;Network Diagnostics</span>
+              </div>
+              <div class="tui-panel">
+                <div class="tui-lines" id="tuiLines"></div><span class="tui-caret"></span>
+              </div>
+            </div>
+            <div class="tui-footer">↑↓ Navigate&nbsp;&nbsp;&nbsp;Enter Select&nbsp;&nbsp;&nbsp;r Refresh&nbsp;&nbsp;&nbsp;q Quit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container hero-ways">
+      <p class="ways-label">Other ways to use NETWATCH NG:</p>
+      <ul class="ways-list">
+        <li><a href="#demo">Full-screen TUI</a></li>
+        <li><a href="#features">CLI `netwatch-ng`</a></li>
+        <li><a href="#installation">Signed APT repository</a></li>
+        <li><a href="https://github.com/sudomarc/NETWATCH/tree/main/tests_e2e" target="_blank" rel="noopener">E2E tests</a></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ INSTALLATION / GETTING STARTED ============ -->
+  <section class="section" id="installation">
+    <div class="container">
+      <div class="section-head reveal">
+        <h2>Get started with NETWATCH NG</h2>
+      </div>
+      <div class="pricing-grid">
+        <article class="card reveal">
+          <h3>Via the official APT repository</h3>
+          <p>Recommended method: signed repository published on GitHub Pages, <strong>netwatch-ng</strong> package 2.0.0-1 (<code>stable</code> suite, <code>main</code> component, amd64 architectures). Works on Debian and antiX.</p>
+          <div class="install-cmd" role="group" aria-label="Official APT repository configuration">
+            <code id="cmd-apt">sudo install -d -m 0755 /usr/share/keyrings<br><br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+            <button class="copy-btn" data-copy-target="cmd-apt" aria-label="Copy official APT repository configuration">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+          <a class="card-cta" href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">Version 2.0.0 tag</a>
+        </article>
+        <article class="card reveal">
+          <h3>From source</h3>
+          <p>The alternative for developing or contributing: clone the repository, install the Python package in editable mode and launch the TUI. No third-party dependency required.</p>
+          <div class="install-cmd" role="group" aria-label="Installation commands from source">
+            <code id="cmd-git">git clone https://github.com/sudomarc/NETWATCH.git<br>cd NETWATCH<br>python -m pip install -e .<br>python -m netwatch_ng</code>
+            <button class="copy-btn" data-copy-target="cmd-git" aria-label="Copy source installation commands">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+          <a class="card-cta" href="https://github.com/sudomarc/NETWATCH#installation" target="_blank" rel="noopener">Full installation instructions</a>
+        </article>
+      </div>
+      <div class="includes-bar reveal">
+        <div class="includes-head">
+          <strong>Included in version 2.x</strong>
+          <a href="https://github.com/sudomarc/NETWATCH/blob/main/README.md" target="_blank" rel="noopener">See all capabilities</a>
+        </div>
+        <ul class="includes-list">
+          <li>Dashboard &amp; interface inspection</li>
+          <li>ARP/NDP discovery &amp; Nmap</li>
+          <li>Wi-Fi inventory &amp; survey</li>
+          <li>IPv4/IPv6 firewall control</li>
+          <li>Network diagnostics</li>
+          <li>JSON / CSV exports</li>
+        </ul>
+      </div>
+      <p class="fine-print reveal">Signed and verified APT repository (public key, index and package signature). NETWATCH NG remains an administration tool: use it only on systems and networks you own or are explicitly authorized to manage.</p>
+    </div>
+  </section>
+
+  <!-- ============ CHANGELOG ============ -->
+  <section class="section section-changelog" id="changelog">
+    <div class="container changelog-grid">
+      <div class="changelog-head reveal">
+        <svg class="head-icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="30" rx="4" fill="none" stroke="var(--ink)" stroke-width="2.4"/><path d="M13 19h10M13 25h22M13 31h14" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/><path d="M30 6l4 4-9 9-5 1 1-5z" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linejoin="round"/></svg>
+        <h2>Changelog</h2>
+      </div>
+      <div class="changelog-items">
+        <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">
+          <p><strong>2.0.0:</strong> first stable release published on the official signed APT repository — <code>netwatch-ng</code> package 2.0.0-1, <code>stable/main</code> index on GitHub Pages, InRelease signature verifiable with the repository public key.</p>
+          <div class="changelog-meta"><span class="tag">Version</span><span class="date">2.0.0-1</span></div>
+        </a>
+        <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
+          <p><strong>Wi-Fi stability:</strong> network survey now refuses to force the interface carrying the default route into monitor mode — a survey never silently drops the machine's connectivity anymore.</p>
+          <div class="changelog-meta"><span class="tag">Fix</span><span class="date">Unreleased</span></div>
+        </a>
+        <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
+          <p><strong>Valid JSON:</strong> `scan json` again produces parseable output even when a hostname or vendor contains quotes.</p>
+          <div class="changelog-meta"><span class="tag">Fix</span><span class="date">Unreleased</span></div>
+        </a>
+        <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
+          <p><strong>End-to-end tests:</strong> the real TUI runs in a pseudo-terminal with a hermetic fake PATH — no network scan or firewall change during tests.</p>
+          <div class="changelog-meta"><span class="tag">Tests</span><span class="date">1.3.1</span></div>
+        </a>
+        <a class="btn btn-secondary btn-block reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">View changelog
+          <svg class="ext-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3L7 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M11 9v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURES + TUI DEMO ============ -->
+  <section class="section" id="features">
+    <div class="container">
+      <div class="center-head reveal">
+        <svg class="head-icon-lg" viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="10" width="32" height="24" rx="3" fill="none" stroke="var(--ink)" stroke-width="2.4"/><path d="M20 40h8M24 34v6" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/><path d="M15 17l5 5-5 5M24 27h9" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h2>What NETWATCH NG monitors</h2>
+        <p class="center-sub">Every module is implemented and tested. The TUI delegates all business logic to the command layer: validation, ownership checks and SSH host verification remain in the core.</p>
+      </div>
+
+      <div class="demo-block reveal" id="demo">
+        <div class="demo-tabs" role="tablist" aria-label="TUI screens">
+          <button class="demo-tab is-active" role="tab" aria-selected="true" id="tab-discovery" aria-controls="panel-discovery">Discovery</button>
+          <button class="demo-tab" role="tab" aria-selected="false" id="tab-wifi" aria-controls="panel-wifi">Wi-Fi</button>
+          <button class="demo-tab" role="tab" aria-selected="false" id="tab-firewall" aria-controls="panel-firewall">Firewall</button>
+          <button class="demo-tab" role="tab" aria-selected="false" id="tab-diagnostic" aria-controls="panel-diagnostic">Diagnostics</button>
+          <button class="demo-tab" role="tab" aria-selected="false" id="tab-traffic" aria-controls="panel-traffic">Traffic</button>
+        </div>
+        <div class="demo-terminal">
+          <div class="demo-chrome"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span><span class="demo-chrome-title" id="demoTitle">netwatch-ng — Devices</span></div>
+          <pre class="demo-screen" id="demoScreen" aria-live="polite"></pre>
+        </div>
+        <div class="demo-captions">
+          <div class="demo-caption" id="panel-discovery" role="tabpanel" aria-labelledby="tab-discovery">
+            <h3>Device discovery</h3>
+            <p>Continuous passive ARP/NDP discovery, operator-triggered Nmap on an authorized target or subnet, evidence-based identification (neighbors, Nmap, local OUI table) with source and confidence level displayed. Inventory export to JSON or CSV.</p>
+          </div>
+          <div class="demo-caption" id="panel-wifi" role="tabpanel" aria-labelledby="tab-wifi" hidden>
+            <h3>Wi-Fi intelligence</h3>
+            <p>Radio inventory and access-point survey via the Aircrack-ng suite (`airmon-ng`, `airodump-ng`). Monitor mode is an explicit operator action: the interface carrying the default route is never forced, and the TUI restores the adapter on exit.</p>
+          </div>
+          <div class="demo-caption" id="panel-firewall" role="tabpanel" aria-labelledby="tab-firewall" hidden>
+            <h3>Firewall</h3>
+            <p>IPv4/IPv6 forwarding blocking (FORWARD chain) via NETWATCH rules marked as owned. A pre-existing chain of the same name is rejected rather than modified. Read-only preview and explicit confirmation before each reset.</p>
+          </div>
+          <div class="demo-caption" id="panel-diagnostic" role="tabpanel" aria-labelledby="tab-diagnostic" hidden>
+            <h3>Network diagnostics</h3>
+            <p>Default gateway ping, DNS resolution and route trace from the TUI, with bounded activity log. Each result is dated, qualified (success, warning) and viewable in the Logs screen.</p>
+          </div>
+          <div class="demo-caption" id="panel-traffic" role="tabpanel" aria-labelledby="tab-traffic" hidden>
+            <h3>Traffic management</h3>
+            <p>Egress/ingress rate policing via `tc` clsact filters: packets above the configured rate are dropped. The root qdisc is never replaced — behavior is stated as-is, without an HTB shaping promise.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADAPTS TO YOUR TERMINAL ============ -->
+  <section class="section section-alt" id="terminal">
+    <div class="container">
+      <div class="center-head reveal">
+        <h2>Adapts to your terminal</h2>
+      </div>
+      <div class="adapt-grid">
+        <article class="adapt-card reveal">
+          <div class="adapt-visual adapt-visual-tui" aria-hidden="true">
+            <div class="mini-tui">
+              <div class="mini-bar"><b>NETWATCH NG</b><span>[Devices]</span></div>
+              <div class="mini-rows">
+                <span class="row sel">▸ 192.168.1.42&nbsp;&nbsp;a4:83:e7&nbsp;&nbsp;printer&nbsp;&nbsp;BLOCK</span>
+                <span class="row">▸ 192.168.1.17&nbsp;&nbsp;d8:3a:dd&nbsp;&nbsp;raspberry&nbsp;&nbsp;READY</span>
+                <span class="row">▸ 192.168.1.23&nbsp;&nbsp;00:1a:2b&nbsp;&nbsp;laptop&nbsp;&nbsp;&nbsp;&nbsp;READY</span>
+              </div>
+            </div>
+          </div>
+          <h3>Keyboard-driven TUI</h3>
+          <p>curses interface with no third-party Python dependency: `↑↓` navigation, `/` to filter, `?` for help, explicit confirmations for every destructive action.</p>
+        </article>
+        <article class="adapt-card reveal">
+          <div class="adapt-visual" aria-hidden="true">
+            <div class="mini-code">
+              <div class="mini-bar mini-bar-dark"><b>scan</b><span>json</span></div>
+              <div class="mini-json">
+                <span>{</span>
+                <span>&nbsp;&nbsp;"ip": "192.168.1.42",</span>
+                <span>&nbsp;&nbsp;"mac": "A4:83:E7:…",</span>
+                <span>&nbsp;&nbsp;"vendor": "…", <em>"source":</em> "arp"</span>
+                <span>}</span>
+              </div>
+            </div>
+          </div>
+          <h3>Machine output</h3>
+          <p>`scan json` / `scan csv` remain pure CLI interfaces, intended for scripting and automation: never decorated by human display.</p>
+        </article>
+        <article class="adapt-card reveal">
+          <div class="adapt-visual adapt-visual-deps" aria-hidden="true">
+            <ul class="deps-list">
+              <li><span class="ok">✓</span> nmap <em>detected</em></li>
+              <li><span class="ok">✓</span> iproute2 <em>detected</em></li>
+              <li><span class="ok">✓</span> iptables <em>detected</em></li>
+              <li><span class="warn">–</span> aircrack-ng <em>optional</em></li>
+            </ul>
+          </div>
+          <h3>Tools detected at runtime</h3>
+          <p>Nmap, iproute2, iptables, OpenSSH, Aircrack-ng: each optional tool is detected at startup, and the capabilities that depend on it are announced as unavailable rather than simulated.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECURITY ============ -->
+  <section class="section" id="security">
+    <div class="container">
+      <div class="center-head reveal">
+        <h2>Security-first design</h2>
+        <p class="center-sub">The principles that govern every NETWATCH NG screen.</p>
+      </div>
+      <div class="security-grid">
+        <blockquote class="security-item reveal">
+          <p>« Identification is evidence-based: neighbors, Nmap and local OUI table. Every device attribute remains labeled with its source and confidence level. »</p>
+          <footer>Evidence-based identification</footer>
+        </blockquote>
+        <blockquote class="security-item reveal">
+          <p>« Block and unblock operate only on the NETWATCH chain explicitly marked as owned. A pre-existing chain with the same name is rejected, never modified. »</p>
+          <footer>Owned Netfilter chains</footer>
+        </blockquote>
+        <blockquote class="security-item reveal">
+          <p>« No destructive action is ever a one-key action: scope, target and owned resources are displayed before confirmation. »</p>
+          <footer>Explicit confirmations</footer>
+        </blockquote>
+        <blockquote class="security-item reveal">
+          <p>« With `--dry-run`, no write occurs — not iptables, not tc, not ARP, not state files — while read-only validation describes what would happen. »</p>
+          <footer>Dry-run contract</footer>
+        </blockquote>
+      </div>
+      <div class="tools-wall reveal">
+        <h3 class="tools-wall-title">Relies on your favorite Linux tools</h3>
+        <p class="tools-wall-sub">NETWATCH NG runs the standard Linux networking utilities you already use — nmap, iproute2, iptables, tc, aircrack-ng, OpenSSH — and reports which ones are present or missing.</p>
+        <ul class="tools-grid">
+          <li>nmap</li><li>iproute2</li><li>iptables</li><li>ip6tables</li><li>tc</li><li>aircrack-ng</li><li>OpenSSH</li><li>iw</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="section section-alt" id="faq">
+    <div class="container faq-grid">
+      <div class="faq-head reveal"><h2>FAQ</h2></div>
+      <div class="faq-list">
+        <details class="faq-item reveal">
+          <summary>On which systems does NETWATCH NG run?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>NETWATCH NG is a Linux-only tool. The TUI requires Python 3.10+ (standard library `curses`, no third-party dependency). Debian package builds are validated in CI for Debian 12 and 13.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Are root privileges required?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Control operations — firewall, Wi-Fi monitor mode, traffic policing, reset — require root. Passive discovery, interface inspection and diagnostics work without elevation, with separate state directories by privilege.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Is Wi-Fi monitor mode dangerous for my connection?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Putting an interface into monitor mode interrupts the Wi-Fi connection on that interface: it's an explicit action, preceded by a warning and confirmation. The survey refuses to force the interface carrying the default route, and the TUI restores the adapter on exit. `airmon-ng check kill` is never run automatically.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Which optional tools enrich NETWATCH NG?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Nmap for active discovery and service identification, the Aircrack-ng suite for Wi-Fi inventory and survey, `dsniff`/`arping` for ARP support on the 1.x line. Missing tools are detected at runtime and the corresponding capabilities are announced as unavailable.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>What is the difference between NG and the legacy Bash 1.x line?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>NETWATCH NG is the Python 3 rewrite with an exclusive full-screen TUI (dashboard, devices, firewall, diagnostics, persistent settings, bounded activity log). The legacy Bash 1.x scripts remain available as the historical CLI surface; the 1.x capability table in the README describes that line, not the rewrite.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Is there a stable 2.0.0 version?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Yes. Version <strong>2.0.0-1</strong> is published on the official signed APT repository (<code>stable</code>/<code>main</code>, amd64) and accompanied by the GitHub release `v2.0.0`. Installation is a single command after repository configuration; the from-source method remains available for contributing.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Can I contribute or report a security issue?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Yes. See `CONTRIBUTING.md` for contributions and `SECURITY.md` for responsible disclosure. Regression tests (Bash and Python) and the pseudo-terminal E2E suite run locally without real network scanning.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESOURCES ============ -->
+  <section class="section" id="resources">
+    <div class="container">
+      <div class="center-head reveal"><h2>Documentation and resources</h2></div>
+      <div class="res-grid">
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/README.md" target="_blank" rel="noopener"><span class="res-kind">Documentation</span><span class="res-title">Project README</span><span class="res-desc">Capabilities, requirements, IPv4/IPv6 usage, dry-run contract, persistence.</span></a>
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener"><span class="res-kind">Contributing</span><span class="res-title">CONTRIBUTING.md</span><span class="res-desc">How to submit fixes, tests and documentation.</span></a>
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/SECURITY.md" target="_blank" rel="noopener"><span class="res-kind">Security</span><span class="res-title">SECURITY.md</span><span class="res-desc">Responsible disclosure policy and authorized scope.</span></a>
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/docs/apt-repository.md" target="_blank" rel="noopener"><span class="res-kind">Deployment</span><span class="res-title">Signed APT repository</span><span class="res-desc">Publication, GPG signing and verification of the official `stable/main` repository.</span></a>
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/tree/main/tests_e2e" target="_blank" rel="noopener"><span class="res-kind">Quality</span><span class="res-title">E2E tests</span><span class="res-desc">The real TUI in a pseudo-terminal, with hermetic fake PATH.</span></a>
+        <a class="res-card reveal" href="https://github.com/sudomarc/NETWATCH/blob/main/docs/NETWATCH_DESIGN_SYSTEM.md" target="_blank" rel="noopener"><span class="res-kind">Design</span><span class="res-title">TUI design system</span><span class="res-desc">Hierarchy, semantic states, security UX rules.</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA FINAL ============ -->
+  <section class="cta-dark" id="download">
+    <div class="container cta-grid">
+      <div class="reveal">
+        <h2>Supervise your network from your terminal.</h2>
+        <p class="cta-sub">NETWATCH NG runs where you work: in your terminal.</p>
+      </div>
+      <div class="cta-install reveal">
+        <div class="install-cmd install-cmd-dark" role="group" aria-label="APT repository configuration and installation">
+          <code id="cmd-cta">curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+          <button class="copy-btn copy-btn-light" data-copy-target="cmd-cta" aria-label="Copy APT installation command">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+          </button>
+        </div>
+        <p class="cta-note">Or consult the <a href="https://github.com/sudomarc/NETWATCH#readme" target="_blank" rel="noopener">documentation</a> or the <a href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">version 2.0.0 tag</a>.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <a class="brand" href="#top">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><circle cx="16" cy="16" r="9" fill="none" stroke="#F4F7F5" stroke-width="2"/><circle cx="16" cy="16" r="3.2" fill="#F4F7F5"/><path d="M16 16 L23.5 10.5" stroke="#F4F7F5" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <span class="brand-name">NETWATCH <span class="brand-ng">NG</span></span>
+      </a>
+      <p>Network monitoring, analysis and diagnostics under Linux. MIT Licensed.</p>
+      <p class="footer-copy">© 2026 sudomarc · <a href="https://github.com/sudomarc/NETWATCH/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></p>
+    </div>
+    <nav class="footer-col" aria-label="Project">
+      <h3>Project</h3>
+      <a href="https://github.com/sudomarc/NETWATCH" target="_blank" rel="noopener">GitHub repository</a>
+      <a href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">Version 2.0.0</a>
+      <a href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      <a href="https://github.com/sudomarc/NETWATCH/actions" target="_blank" rel="noopener">Continuous integration</a>
+      <a href="https://github.com/sudomarc/NETWATCH/issues" target="_blank" rel="noopener">Report an issue</a>
+    </nav>
+    <nav class="footer-col" aria-label="Documentation">
+      <h3>Documentation</h3>
+      <a href="https://github.com/sudomarc/NETWATCH#readme" target="_blank" rel="noopener">README</a>
+      <a href="https://github.com/sudomarc/NETWATCH/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a>
+      <a href="https://github.com/sudomarc/NETWATCH/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+      <a href="https://github.com/sudomarc/NETWATCH/blob/main/docs/apt-repository.md" target="_blank" rel="noopener">APT repository guide</a>
+    </nav>
+    <nav class="footer-col" aria-label="On this page">
+      <h3>On this page</h3>
+      <a href="#features">Features</a>
+      <a href="#installation">Installation</a>
+      <a href="#security">Security</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>

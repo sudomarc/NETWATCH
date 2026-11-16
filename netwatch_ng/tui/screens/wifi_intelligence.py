@@ -25,16 +25,16 @@ def _backend_line() -> list[str]:
     airmon = which(AIRMON_NG) is not None
     airodump = which(AIRODUMP_NG) is not None
     if airmon and airodump:
-        return ["  Moteur : Aircrack-ng (airmon-ng / airodump-ng) [READY]"]
+        return ["  Engine: Aircrack-ng (airmon-ng / airodump-ng) [READY]"]
     missing = []
     if not airmon:
         missing.append(AIRMON_NG)
     if not airodump:
         missing.append(AIRODUMP_NG)
     return [
-        "  Moteur : Aircrack-ng [MISSING]",
-        f"  Binaire(s) système absent(s) ou hors PATH : {', '.join(missing)}.",
-        "  Installez le paquet système aircrack-ng (par exemple: apt install aircrack-ng).",
+        "  Engine: Aircrack-ng [MISSING]",
+        f"  Missing system binary(-ies) or not in PATH: {', '.join(missing)}.",
+        "  Install the aircrack-ng system package (e.g. apt install aircrack-ng).",
     ]
 
 
@@ -53,8 +53,8 @@ def build_wifi_lines(
         lines.extend(
             [
                 "",
-                f"  [ERROR] Détection des interfaces impossible: {exc}",
-                "  airmon-ng est introuvable : installez le paquet système aircrack-ng.",
+                f"  [ERROR] Interface detection impossible: {exc}",
+                "  airmon-ng not found: install the aircrack-ng system package.",
             ]
         )
         _append_message(lines, message)
@@ -63,8 +63,8 @@ def build_wifi_lines(
         lines.extend(
             [
                 "",
-                f"  [ERROR] Détection des interfaces impossible: {exc}",
-                "  airmon-ng requiert les privilèges root : exécutez NETWATCH en root.",
+                f"  [ERROR] Interface detection impossible: {exc}",
+                "  airmon-ng requires root privileges: run NETWATCH as root.",
             ]
         )
         _append_message(lines, message)
@@ -85,7 +85,7 @@ def build_wifi_lines(
     lines.append("RADIO STATE")
     lines.append(
         "  rfkill soft/hard block: not reported by the Aircrack-ng engine "
-        "(information indisponible via ce moteur; consultez rfkill directement)."
+        "(information not available via this engine; consult rfkill directly)."
     )
 
     lines.append("")
@@ -110,7 +110,7 @@ def build_wifi_lines(
             f"  Access points and stations observed via {interface_name or '-'}: "
             f"[READY] {len(access_points)} AP / {station_count} station(s)"
         )
-        lines.append(f"  Dernière MAJ: {stamp}")
+        lines.append(f"  Last update: {stamp}")
         lines.append(
             "  SSID / BSSID                    Ch  Signal   Security advertised"
         )

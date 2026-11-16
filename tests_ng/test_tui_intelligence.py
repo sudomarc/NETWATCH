@@ -41,7 +41,7 @@ def test_wifi_screen_discloses_backend_and_channel_count_limitation(monkeypatch)
         ],
         "wlan0",
     )
-    assert any("Moteur : Aircrack-ng" in line for line in lines)
+    assert any("Engine: Aircrack-ng" in line for line in lines)
     assert any("wlan0" in line and "managed" in line for line in lines)
     assert any("Observed APs per channel" in line for line in lines)
     assert any("not measured RF utilization" in line for line in lines)
@@ -76,7 +76,7 @@ def test_wifi_screen_shows_stations_and_last_update(monkeypatch):
         "wlan0",
         stations=stations,
     )
-    assert any("Dernière MAJ:" in line for line in lines)
+    assert any("Last update:" in line for line in lines)
     assert any("11:22:33:44:55:66" in line for line in lines)
     assert any("Stations detected" in line for line in lines)
 
@@ -89,7 +89,7 @@ def test_wifi_screen_reports_missing_backend(monkeypatch):
     )
     monkeypatch.setattr(wifi_intelligence, "which", lambda binary: None)
     lines = wifi_intelligence.build_wifi_lines(None, None)
-    assert any("Binaire(s) système absent(s)" in line for line in lines)
+    assert any("Missing system binary" in line for line in lines)
     assert any("apt install aircrack-ng" in line for line in lines)
 
 
