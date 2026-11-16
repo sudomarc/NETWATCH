@@ -14,9 +14,10 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOWN = b"\x1bOB"  # xterm-256color terminfo: kcud1
+
+SPLASH_TAGLINE = "NETWORK VISIBILITY. INTELLIGENCE. CONTROL."
 
 
 def _install_fake_commands(tmp_path: Path) -> tuple[Path, Path]:
@@ -125,18 +126,15 @@ class _TerminalSession:
         os.close(self.master_fd)
 
 
-@pytest.mark.e2e
-def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
-    """Exercise the real curses app without touching the host network stack."""
-    fake_bin, command_log = _install_fake_commands(tmp_path)
+def _base_env(tmp_path: Path) -> dict[str, str]:
     config_dir = tmp_path / "netwatch-config"
     env = os.environ.copy()
     env.update(
         {
             "HOME": str(tmp_path),
             "NETWATCH_NG_CONFIG": str(config_dir),
-            "NETWATCH_E2E_COMMAND_LOG": str(command_log),
-            "PATH": str(fake_bin),
+            "NETWATCH_E2E_COMMAND_LOG": str(tmp_path / "commands.jsonl"),
+            "PATH": str(_install_fake_commands(tmp_path)[0]),
             "PYTHONPATH": str(PROJECT_ROOT),
             "PYTHONDONTWRITEBYTECODE": "1",
             "TERM": "xterm-256color",
@@ -144,11 +142,89 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
             "LC_ALL": "C.UTF-8",
         }
     )
+    return env
+
+
+@pytest.mark.e2e
+def test_splash_renders_and_keyboard_skip_reaches_dashboard(tmp_path: Path) -> None:
+    """The splash shows brand/tagline/version, and any key skips straight to
+    the Dashboard without an extra key press."""
+    env = _base_env(tmp_path)
+    command_log = env["NETWATCH_E2E_COMMAND_LOG"]
 
     session = _TerminalSession(PROJECT_ROOT, env)
     try:
-        # The application must start in a real terminal session.
+        # The application starts by showing the splash.
         session.expect("NETWATCH NG")
+        session.expect(SPLASH_TAGLINE)
+
+        # Pressing any key skips the splash immediately (no extra key press).
+        session.send(b" ")
+        session.expect("CONNECTION")  # Dashboard content appears
+
+        # Regression-free navigation still works after the splash.
+        for _ in range(4):
+            session.send(DOWN)
+            time.sleep(0.03)
+        session.expect("FIREWALL MANAGER")
+        session.send(b"b")
+        session.expect("IPv4/IPv6 address:")
+        session.send(b"192.0.2.10\n")
+        session.expect("Block 192.0.2.10 on the forwarding path?")
+        session.send(b"n")
+        session.expect("Block cancelled.")
+
+        session.send(b"q")
+        assert session.process.wait(timeout=5) == 0
+    finally:
+        session.close()
+
+    calls = [
+        json.loads(line)
+        for line in Path(command_log).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(call["name"] == "ip" for call in calls)
+    assert not any(
+        call["name"] in {"iptables", "ip6tables"}
+        and {"-A", "-I", "-D", "-F", "-X", "-P"}.intersection(call["args"])
+        for call in calls
+    )
+
+
+@pytest.mark.e2e
+def test_splash_auto_transitions_to_dashboard_without_keys(tmp_path: Path) -> None:
+    """With no key press, the splash runs for its duration then opens the
+    Dashboard automatically."""
+    env = _base_env(tmp_path)
+
+    session = _TerminalSession(PROJECT_ROOT, env)
+    try:
+        session.expect("NETWATCH NG")
+        session.expect(SPLASH_TAGLINE)
+
+        # No keys are sent: after roughly seven seconds the Dashboard opens.
+        session.expect("CONNECTION", timeout=12.0)
+
+        session.send(b"q")
+        assert session.process.wait(timeout=5) == 0
+    finally:
+        session.close()
+
+
+@pytest.mark.e2e
+def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
+    """Exercise the real curses app without touching the host network stack."""
+    env = _base_env(tmp_path)
+
+    session = _TerminalSession(PROJECT_ROOT, env)
+    try:
+        # The application starts with the splash; skip it to reach the
+        # Dashboard, then exercise settings and navigation as before.
+        session.expect("NETWATCH NG")
+        session.expect(SPLASH_TAGLINE)
+        session.send(b" ")
+        session.expect("CONNECTION")
 
         # Open Firewall and cancel a proposed block. The fake iptables
         # executable rejects every mutating operation as a second safety net.
@@ -181,6 +257,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
         session.send(b"0")
         session.expect("Automatic refresh disabled.")
 
+        config_dir = Path(env["NETWATCH_NG_CONFIG"])
         settings_file = config_dir / "settings.json"
         assert settings_file.is_file()
         assert json.loads(settings_file.read_text(encoding="utf-8"))[
@@ -194,7 +271,7 @@ def test_operator_flow_is_safe_and_settings_persist(tmp_path: Path) -> None:
 
     calls = [
         json.loads(line)
-        for line in command_log.read_text(encoding="utf-8").splitlines()
+        for line in Path(env["NETWATCH_E2E_COMMAND_LOG"]).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert any(call["name"] == "ip" for call in calls)

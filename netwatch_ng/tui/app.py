@@ -18,6 +18,7 @@ from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, rout
 from netwatch_ng.discovery import device_intelligence, devices as devices_mod, export as device_export, nmap_scan
 from netwatch_ng.system.config import get_config_dir, is_root
 from netwatch_ng.tui import components, theme
+from netwatch_ng.tui.splash import show_splash
 from netwatch_ng.tui.screens.dashboard import build_dashboard_lines
 from netwatch_ng.tui.screens.devices import build_devices_lines
 from netwatch_ng.tui.screens.diagnostics import build_diagnostics_lines
@@ -431,6 +432,15 @@ def run(stdscr) -> None:
                 components.USE_ASCII_BOX = True
         except Exception:
             components.USE_ASCII_BOX = True
+
+        # Animated startup splash: brand the launch, then open the Dashboard.
+        # Any key skips it immediately; otherwise it runs for a few seconds.
+        try:
+            show_splash(stdscr, colors_enabled)
+        except Exception:
+            # The splash is cosmetic: a failure must never prevent the
+            # Dashboard from opening or disturb the curses lifecycle.
+            pass
 
         last_refresh = time.monotonic()
 
