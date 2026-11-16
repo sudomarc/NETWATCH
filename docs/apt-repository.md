@@ -1,8 +1,14 @@
 # NETWATCH NG APT repository setup
 
-The signed repository publication workflow is
-`.github/workflows/publish-apt.yml`. It publishes only after a stable
-GitHub Release with a tag matching `v2.X.Y`.
+The signed APT repository is published by
+`.github/workflows/publish-apt.yml`. Publishing is triggered only when a
+stable GitHub Release is published with a tag matching `v2.X.Y`.
+
+The unified `CI` workflow in `.github/workflows/ci.yml` checks the legacy
+Bash/TUI components, NETWATCH NG on Python 3.10–3.12, and Debian package
+build/install smoke tests on Debian 12 and 13. The publication workflow
+repeats the NETWATCH NG unit and end-to-end tests, then builds and verifies
+the release package before signing and deploying the APT repository.
 
 ## 1. Create a dedicated archive signing key
 
@@ -26,9 +32,10 @@ In repository Settings → Secrets and variables → Actions, create:
 - `APT_GPG_KEY_ID`: the full 40-character primary-key fingerprint.
 - `APT_GPG_PASSPHRASE`: the key passphrase.
 
-The private key is imported into a temporary GnuPG home during a workflow
-run. The signing workflows do not print or publish the private key or
-passphrase.
+The publication workflow imports the private key into a temporary GnuPG home.
+It verifies that the imported key matches `APT_GPG_KEY_ID`, signs the APT
+metadata, and verifies both signatures with the exported public key. Temporary
+key material is removed when the workflow finishes.
 
 ## 3. Enable GitHub Pages
 
@@ -37,39 +44,33 @@ In repository Settings → Pages, set the deployment source to **GitHub Actions*
 The publication workflow uses the `github-pages` environment and requires
 `pages: write` and `id-token: write` permissions.
 
-## 4. Validate the signing secrets without publishing
+## 4. Validate changes before a release
 
-After adding all three secrets, open Actions → **Validate NETWATCH NG APT
-signing key** → Run workflow.
+The unified `CI` workflow runs automatically for pull requests and pushes to
+the supported development branches. It checks the legacy Bash and TUI code,
+runs NETWATCH NG unit and end-to-end tests across Python 3.10–3.12, and builds,
+installs, and smoke-tests the Debian package on Debian 12 and 13.
 
-This manual workflow:
-
-1. Imports the private key into a temporary GnuPG home.
-2. Confirms that its primary fingerprint matches `APT_GPG_KEY_ID`.
-3. Signs temporary Release metadata with detached and clear signatures.
-4. Verifies both signatures in a separate GnuPG home containing only the
-   exported public key.
-5. Deletes its temporary key material when the job ends.
-
-It does not create a GitHub Release or deploy to GitHub Pages.
+No separate manual signing-key workflow is required. The publication workflow
+performs the key fingerprint check and cryptographic signing verification
+before anything is deployed.
 
 ## 5. Publish a stable release
 
-Only publish after the Debian package build, unit tests, E2E tests and the
-manual signing-key validation have passed.
+Publish only after the unified CI checks have passed.
 
-Create a GitHub Release using a stable `v2.X.Y` tag, for example
-`v2.0.0`. The workflow rejects malformed, non-stable or non-2.x tags.
+Create a GitHub Release using a stable `v2.X.Y` tag, for example `v2.0.0`.
+The publication workflow rejects malformed, non-stable, or non-2.x tags.
 
-The release workflow synchronizes the Python project version in its
-temporary checkout with the release tag, creates the matching Debian
-changelog version, runs unit and E2E tests, builds the package and checks
-both Debian and Python package metadata versions before signing.
+The workflow synchronizes the Python project version in its temporary
+checkout with the release tag, creates the matching Debian changelog version,
+runs NETWATCH NG unit and end-to-end tests, builds the package, and checks both
+Debian and Python package metadata versions before signing.
 
 The publication workflow then:
 
 1. Builds the Debian `.deb` package.
-2. Generates the `Packages`, `Packages.gz` and `Release` indexes.
+2. Generates the `Packages`, `Packages.gz`, and `Release` indexes.
 3. Signs `InRelease` and `Release.gpg`.
 4. Verifies both signatures using the exported public key.
 5. Publishes the repository and public key through GitHub Pages.
@@ -93,5 +94,5 @@ The repository index targets Debian `amd64` systems. The `.deb` itself is
 an architecture-independent Python package.
 
 Do not treat the repository as ready until the first real Pages deployment
-has completed and the public key, index and package signature have been
+has completed and the public key, index, and package signature have been
 verified from a clean client machine.

@@ -2,14 +2,16 @@ name: CI
 
 on:
   push:
-    branches: ["main", "fix/**"]
+    branches: ["main", "fix/**", "feat/**", "v2/**", "test/**"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  bash:
+  legacy:
+    name: Legacy Bash and TUI checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,20 +28,103 @@ jobs:
       - name: ShellCheck
         run: shellcheck netwatch.sh netwatch-ipv6.sh netwatch-router.sh
 
-      - name: Validation tests
+      - name: Legacy validation tests
         run: bash tests/test_validation.sh
 
-      - name: Output tests
+      - name: Legacy output tests
         run: bash tests/test_output.sh
 
-      - name: CLI tests
+      - name: Legacy CLI tests
         run: bash tests/test_cli.sh
 
-      - name: Firewall tests
+      - name: Legacy firewall tests
         run: sudo -E bash tests/test_firewall.sh
 
-      - name: IPv6 tests
+      - name: Legacy IPv6 tests
         run: sudo -E bash tests/test_ipv6.sh
 
-      - name: Router tests
+      - name: Legacy router tests
         run: bash tests/test_router.sh
+
+      - name: TUI syntax
+        run: python3 -m py_compile ui/netwatch_tui.py
+
+      - name: TUI regression tests
+        run: bash tests/test_tui.sh
+
+  netwatch-ng:
+    name: NETWATCH NG tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and test dependencies
+        run: python -m pip install --upgrade pip && pip install -e . pytest
+
+      - name: Syntax check
+        run: python -m py_compile $(find netwatch_ng -name "*.py")
+
+      - name: Unit tests
+        run: python -m pytest tests_ng -v
+
+      - name: End-to-end tests
+        run: python -m pytest tests_e2e -v
+
+  debian-package:
+    name: Debian package smoke test (${{ matrix.distribution }})
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Debian 12 (Bookworm)
+            image: debian:bookworm-slim
+          - distribution: Debian 13 (Trixie)
+            image: debian:trixie-slim
+    steps:
+      - name: Install build and test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates build-essential dpkg-dev debhelper dh-python \
+            pybuild-plugin-pyproject python3-all python3-setuptools \
+            python3-pytest iproute2 util-linux
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run NETWATCH NG unit tests
+        run: |
+          python3 -m py_compile $(find netwatch_ng -name "*.py")
+          python3 -m pytest tests_ng -q
+
+      - name: Build Debian binary package
+        run: dpkg-buildpackage -us -uc -b
+
+      - name: Install and smoke-test package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp ../netwatch-ng_*.deb dist/
+          dpkg-deb --info dist/netwatch-ng_*.deb
+          apt-get install -y ./dist/netwatch-ng_*.deb
+          command -v netwatch-ng
+          test -x "$(command -v netwatch-ng)"
+          python3 -c "import netwatch_ng"
+          dpkg-query -W netwatch-ng
+          printf 'q' | script -q -e -c 'TERM=xterm-256color netwatch-ng' /dev/null
+          apt-get remove -y netwatch-ng
