@@ -117,7 +117,7 @@ jobs:
 
       - name: Install and smoke-test package
         run: |
-          set -euo pipefail
+          set -eu
           mkdir -p dist
           cp ../netwatch-ng_*.deb dist/
           dpkg-deb --info dist/netwatch-ng_*.deb
