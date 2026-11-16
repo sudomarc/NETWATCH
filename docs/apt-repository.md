@@ -56,6 +56,11 @@ No separate manual signing-key workflow is required. The release job
 performs the key fingerprint check and cryptographic signing verification
 before anything is deployed.
 
+To publish or retry an existing stable release manually, open Actions → CI →
+Run workflow, select `main`, and enter its tag in `release_tag` (for example
+`v2.1.0`). Leave `release_tag` empty to run CI checks only. The release job
+still validates that the tag is a stable `v2.X.Y` release.
+
 ## 5. Publish a stable release
 
 Publish only after the unified CI checks have passed.

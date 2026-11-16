@@ -5,6 +5,11 @@ on:
     branches: ["main", "fix/**", "feat/**", "v2/**", "test/**"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Stable v2.x.y tag to publish; leave empty to run CI only"
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -13,7 +18,7 @@ permissions:
 
 jobs:
   legacy:
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == '')
     name: Legacy Bash and TUI checks
     runs-on: ubuntu-latest
     steps:
@@ -56,7 +61,7 @@ jobs:
         run: bash tests/test_tui.sh
 
   netwatch-ng:
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == '')
     name: NETWATCH NG tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
@@ -87,7 +92,7 @@ jobs:
         run: python -m pytest tests_e2e -v
 
   debian-package:
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == '')
     name: Debian package smoke test (${{ matrix.distribution }})
     runs-on: ubuntu-latest
     container:
@@ -135,7 +140,11 @@ jobs:
           apt-get remove -y netwatch-ng
 
   publish:
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v2.') && !github.event.release.prerelease
+    if: >-
+      (github.event_name == 'release' &&
+       startsWith(github.event.release.tag_name, 'v2.') &&
+       !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -151,7 +160,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.release_tag }}
           persist-credentials: false
 
       - name: Install Debian build and repository tools
@@ -164,7 +173,7 @@ jobs:
 
       - name: Validate release metadata and run all NETWATCH NG tests
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.release_tag }}
           DEBFULLNAME: NETWATCH NG maintainers
           DEBEMAIL: 177128114+sudomarc@users.noreply.github.com
         run: |
