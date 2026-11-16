@@ -55,7 +55,7 @@
     btn.addEventListener("click", function () {
       var target = document.getElementById(btn.getAttribute("data-copy-target"));
       if (!target) return;
-      var text = target.textContent.replace(/\s*\n\s*/g, "\n").trim();
+      var text = target.innerText.replace(/\s*\n\s*/g, "\n").trim();
       var done = function () {
         btn.classList.add("is-copied");
         setTimeout(function () { btn.classList.remove("is-copied"); }, 1600);

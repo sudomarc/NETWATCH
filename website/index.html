@@ -56,7 +56,7 @@
       <span class="crumb-sep" aria-hidden="true">/</span>
       <span aria-current="page">NETWATCH NG</span>
     </nav>
-    <span class="breadcrumb-version">v2.0.0-1 · published APT repository</span>
+    <span class="breadcrumb-version">v2.1.0-1 · latest stable release</span>
   </div>
 </div>
 
@@ -74,7 +74,7 @@
             <svg class="ext-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3L7 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M11 9v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           </a>
         </div>
-        <p class="hero-note">Linux amd64 · Debian and antiX · <code>netwatch-ng</code> package 2.0.0-1 available</p>
+        <p class="hero-note">Linux amd64 · Debian and antiX · <code>netwatch-ng</code> package 2.1.0-1 available</p>
       </div>
 
       <div class="hero-visual reveal" aria-hidden="true">
@@ -85,7 +85,7 @@
           </div>
           <div class="tui-screen">
             <div class="tui-header">
-              <span class="tui-app">NETWATCH NG</span><span class="tui-ver">v2.0.0</span>
+              <span class="tui-app">NETWATCH NG</span><span class="tui-ver">v2.1.0</span>
               <span class="tui-mode">[Dashboard]&nbsp;&nbsp;root:yes</span>
             </div>
             <div class="tui-body">
@@ -128,14 +128,14 @@
       <div class="pricing-grid">
         <article class="card reveal">
           <h3>Via the official APT repository</h3>
-          <p>Recommended method: signed repository published on GitHub Pages, <strong>netwatch-ng</strong> package 2.0.0-1 (<code>stable</code> suite, <code>main</code> component, amd64 architectures). Works on Debian and antiX.</p>
+          <p>Recommended method: signed repository published on GitHub Pages, <strong>netwatch-ng</strong> package 2.1.0-1 (<code>stable</code> suite, <code>main</code> component, amd64 index). Works on Debian and antiX.</p>
           <div class="install-cmd" role="group" aria-label="Official APT repository configuration">
-            <code id="cmd-apt">sudo install -d -m 0755 /usr/share/keyrings<br><br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+            <code id="cmd-apt">set -eu<br>sudo install -d -m 0755 /usr/share/keyrings<br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>  | sudo gpg --dearmor --yes --output /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>sudo chmod 0644 /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>printf '%s\n' 'deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main' \<br>  | sudo tee /etc/apt/sources.list.d/netwatch-ng.list &gt;/dev/null<br>sudo chown root:root /etc/apt/sources.list.d/netwatch-ng.list<br>sudo chmod 0644 /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update<br>sudo apt install netwatch-ng</code>
             <button class="copy-btn" data-copy-target="cmd-apt" aria-label="Copy official APT repository configuration">
               <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
             </button>
           </div>
-          <a class="card-cta" href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">Version 2.0.0 tag</a>
+          <a class="card-cta" href="https://github.com/sudomarc/NETWATCH/releases/tag/v2.1.0" target="_blank" rel="noopener">Version 2.1.0 release</a>
         </article>
         <article class="card reveal">
           <h3>From source</h3>
@@ -175,6 +175,10 @@
         <h2>Changelog</h2>
       </div>
       <div class="changelog-items">
+        <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/releases/tag/v2.1.0" target="_blank" rel="noopener">
+          <p><strong>2.1.0:</strong> the stable release pipeline now checks release and package version consistency, runs the NETWATCH NG unit and end-to-end suites, verifies the archive signatures, and publishes the signed amd64 APT index.</p>
+          <div class="changelog-meta"><span class="tag">Release</span><span class="date">2.1.0-1</span></div>
+        </a>
         <a class="changelog-item reveal" href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">
           <p><strong>2.0.0:</strong> first stable release published on the official signed APT repository — <code>netwatch-ng</code> package 2.0.0-1, <code>stable/main</code> index on GitHub Pages, InRelease signature verifiable with the repository public key.</p>
           <div class="changelog-meta"><span class="tag">Version</span><span class="date">2.0.0-1</span></div>
@@ -359,8 +363,16 @@
           <p>NETWATCH NG is the Python 3 rewrite with an exclusive full-screen TUI (dashboard, devices, firewall, diagnostics, persistent settings, bounded activity log). The legacy Bash 1.x scripts remain available as the historical CLI surface; the 1.x capability table in the README describes that line, not the rewrite.</p>
         </details>
         <details class="faq-item reveal">
-          <summary>Is there a stable 2.0.0 version?<span class="faq-chevron" aria-hidden="true"></span></summary>
-          <p>Yes. Version <strong>2.0.0-1</strong> is published on the official signed APT repository (<code>stable</code>/<code>main</code>, amd64) and accompanied by the GitHub release `v2.0.0`. Installation is a single command after repository configuration; the from-source method remains available for contributing.</p>
+          <summary>What is the latest stable version?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>NETWATCH NG <strong>2.1.0-1</strong> is published on the official signed APT repository (<code>stable</code>/<code>main</code>, amd64). See the <a href="https://github.com/sudomarc/NETWATCH/releases/tag/v2.1.0" target="_blank" rel="noopener">2.1.0 release notes</a>.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>How do I update NETWATCH NG?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>Refresh APT and install the latest available package with <code>sudo apt update</code> followed by <code>sudo apt install --only-upgrade netwatch-ng</code>. To upgrade all installed packages, use <code>sudo apt upgrade</code>.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Why does the repository use amd64 only?<span class="faq-chevron" aria-hidden="true"></span></summary>
+          <p>The NETWATCH APT index is published for <code>amd64</code>. The installation entry uses <code>arch=amd64</code> only for this repository; it does not disable the system-wide <code>i386</code> architecture or affect other repositories.</p>
         </details>
         <details class="faq-item reveal">
           <summary>Can I contribute or report a security issue?<span class="faq-chevron" aria-hidden="true"></span></summary>
@@ -394,12 +406,12 @@
       </div>
       <div class="cta-install reveal">
         <div class="install-cmd install-cmd-dark" role="group" aria-label="APT repository configuration and installation">
-          <code id="cmd-cta">curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+          <code id="cmd-cta">set -eu<br>sudo install -d -m 0755 /usr/share/keyrings<br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>  | sudo gpg --dearmor --yes --output /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>sudo chmod 0644 /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>printf '%s\n' 'deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main' \<br>  | sudo tee /etc/apt/sources.list.d/netwatch-ng.list &gt;/dev/null<br>sudo chown root:root /etc/apt/sources.list.d/netwatch-ng.list<br>sudo chmod 0644 /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update<br>sudo apt install netwatch-ng</code>
           <button class="copy-btn copy-btn-light" data-copy-target="cmd-cta" aria-label="Copy APT installation command">
             <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
           </button>
         </div>
-        <p class="cta-note">Or consult the <a href="https://github.com/sudomarc/NETWATCH#readme" target="_blank" rel="noopener">documentation</a> or the <a href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">version 2.0.0 tag</a>.</p>
+        <p class="cta-note">Or consult the <a href="https://github.com/sudomarc/NETWATCH#readme" target="_blank" rel="noopener">documentation</a> or the <a href="https://github.com/sudomarc/NETWATCH/releases/tag/v2.1.0" target="_blank" rel="noopener">version 2.1.0 release</a>.</p>
       </div>
     </div>
   </section>
@@ -420,7 +432,7 @@
     <nav class="footer-col" aria-label="Project">
       <h3>Project</h3>
       <a href="https://github.com/sudomarc/NETWATCH" target="_blank" rel="noopener">GitHub repository</a>
-      <a href="https://github.com/sudomarc/NETWATCH/tree/v2.0.0" target="_blank" rel="noopener">Version 2.0.0</a>
+      <a href="https://github.com/sudomarc/NETWATCH/releases/tag/v2.1.0" target="_blank" rel="noopener">Version 2.1.0</a>
       <a href="https://github.com/sudomarc/NETWATCH/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/sudomarc/NETWATCH/actions" target="_blank" rel="noopener">Continuous integration</a>
       <a href="https://github.com/sudomarc/NETWATCH/issues" target="_blank" rel="noopener">Report an issue</a>
