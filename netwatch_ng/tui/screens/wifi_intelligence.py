@@ -94,9 +94,12 @@ def build_wifi_lines(
         lines.extend(
             [
                 "  [INFO] press s to survey nearby access points (airodump-ng; root required).",
+                "  [INFO] the survey refuses to use the adapter carrying the default route, so",
+                "          your active connection is not dropped: put a dedicated adapter in",
+                "          monitor mode first.",
                 "  [INFO] press m to start/stop monitor mode on an interface (explicit action,",
                 "          confirmation required: the active Wi-Fi connection of that interface",
-                "          is interrupted).",
+                "          is interrupted; NETWATCH restores it when it exits).",
                 "  r: refresh",
             ]
         )

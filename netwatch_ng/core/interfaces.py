@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from netwatch_ng.core.shell import BinaryNotFound, run
+from netwatch_ng.core.shell import run
 
 
 @dataclass

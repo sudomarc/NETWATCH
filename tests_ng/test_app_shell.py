@@ -92,3 +92,59 @@ def test_paint_content_renders_lines_inside_panel():
     assert any("192.168.1.1" in text for text in contents)
     # content starts inside the panel border (x > 0)
     assert all(w[1] > 0 for w in stdscr.writes)
+
+
+def test_restore_monitor_interface_stops_and_swallows_errors(monkeypatch):
+    """NETWATCH must not leave an adapter in monitor mode when it exits."""
+    calls = []
+    monkeypatch.setattr(
+        app_module.wifi_intelligence,
+        "stop_monitor_mode",
+        lambda interface: calls.append(interface),
+    )
+    app_module._restore_monitor_interface("wlan0mon")
+    assert calls == ["wlan0mon"]
+
+    # A None interface (nothing was put in monitor mode) is a no-op.
+    app_module._restore_monitor_interface(None)
+    assert calls == ["wlan0mon"]
+
+    # A failing restore must not raise out of the exit path.
+    def boom(interface):
+        raise RuntimeError("airmon-ng missing")
+
+    monkeypatch.setattr(app_module.wifi_intelligence, "stop_monitor_mode", boom)
+    app_module._restore_monitor_interface("wlan0mon")  # must not raise
+
+
+class _QuitScreen(FakeStdscr):
+    """Fake screen that quits immediately and records addstr calls."""
+
+    def keypad(self, value):
+        pass
+
+    def timeout(self, value):
+        pass
+
+    def getch(self):
+        return ord("q")
+
+    def move(self, y, x):
+        pass
+
+    def clrtoeol(self):
+        pass
+
+    def addstr(self, y, x, text, attr=0):
+        self.writes.append((y, x, text, attr))
+
+
+def test_run_restores_monitor_interface_on_exit(monkeypatch):
+    """Driving the real run() loop to quit must restore monitor mode."""
+    restored = []
+    monkeypatch.setattr(curses, "curs_set", lambda value: None)
+    monkeypatch.setattr(app_module, "_configure_colors", lambda mode: False)
+    monkeypatch.setattr(app_module, "_restore_monitor_interface", restored.append)
+    monkeypatch.setattr(app_module, "_screen_lines", lambda *a, **k: ["DASHBOARD"])
+    app_module.run(_QuitScreen())
+    assert restored  # exit path invoked the restore helper

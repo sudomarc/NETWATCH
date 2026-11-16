@@ -14,7 +14,7 @@ def build_system_manager_lines() -> list[str]:
     lines.append(f"  NETWATCH NG version: {__version__}")
     lines.append("")
     lines.append("RUNTIME")
-    lines.append(f"  Running as root: [READY] yes" if config.is_root() else "  Running as root: [DEGRADED] no")
+    lines.append("  Running as root: [READY] yes" if config.is_root() else "  Running as root: [DEGRADED] no")
 
     try:
         cfg_dir = config.get_config_dir()

@@ -18,16 +18,20 @@ ip(){
     fi
 }
 getent(){ printf '%s\n' '192.168.1.42 router"foo,bar'; printf '%s\n' '192.168.1.43 host-two'; }
+
+# The JSON/CSV parsers run in their own process, so a parse failure must be
+# turned into a non-zero exit explicitly; otherwise the test would print a
+# traceback and still "pass".
 json=$(scan json 2>"$TMP/json.err")
-python3 - "$json" <<'PY'
+python3 - "$json" <<'PY' || { echo 'FAIL JSON is not machine-parseable'; exit 1; }
 import json,sys
 data=json.loads(sys.argv[1])
 assert len(data)==2
 assert data[0]['hostname']=='router"foo,bar'
 PY
-! grep -q '\[•\]' <<< "$json"
+grep -q '\[•\]' <<< "$json" && { echo 'FAIL diagnostics leaked into JSON stdout'; exit 1; }
 csv=$(scan csv 2>/dev/null)
-python3 - "$csv" <<'PY'
+python3 - "$csv" <<'PY' || { echo 'FAIL CSV is not machine-parseable'; exit 1; }
 import csv,io,sys
 rows=list(csv.DictReader(io.StringIO(sys.argv[1])))
 assert rows[0]['hostname']=='router"foo,bar'
