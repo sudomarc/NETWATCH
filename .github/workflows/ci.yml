@@ -139,12 +139,86 @@ jobs:
           printf 'q' | script -q -e -c 'TERM=xterm-256color netwatch-ng' /dev/null
           apt-get remove -y netwatch-ng
 
-  publish:
+  release-check:
     if: >-
-      (github.event_name == 'release' &&
-       startsWith(github.event.release.tag_name, 'v2.') &&
-       !github.event.release.prerelease) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.detect.outputs.should_publish }}
+      release_tag: ${{ steps.detect.outputs.release_tag }}
+    steps:
+      - name: Detect unpublished stable release
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+
+          case "$EVENT_NAME" in
+            release)
+              TAG="$RELEASE_EVENT_TAG"
+              ;;
+            workflow_dispatch)
+              TAG="$INPUT_RELEASE_TAG"
+              if [[ -z "$TAG" ]]; then
+                echo "No release tag supplied; this is a CI-only run."
+                exit 0
+              fi
+              ;;
+            push)
+              RELEASE_JSON="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")"
+              TAG="$(jq -r '.tag_name // empty' <<< "$RELEASE_JSON")"
+              ;;
+            *)
+              exit 0
+              ;;
+          esac
+
+          if [[ ! "$TAG" =~ ^v2\.[0-9]+\.[0-9]+$ ]]; then
+            echo "No stable NETWATCH NG release to publish."
+            exit 0
+          fi
+
+          RELEASE_JSON="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
+          if ! jq -e '.draft == false and .prerelease == false' <<< "$RELEASE_JSON" >/dev/null; then
+            echo "Release $TAG is a draft or prerelease; skipping publication."
+            exit 0
+          fi
+
+          CURRENT_DEB_VERSION="$(
+            curl --fail --silent --show-error --retry 3 \
+              https://sudomarc.github.io/NETWATCH/dists/stable/main/binary-amd64/Packages \
+              | awk '
+                  /^Package: netwatch-ng$/ { in_package=1; next }
+                  in_package && /^Version: / {
+                    sub(/^Version: /, "")
+                    print
+                    exit
+                  }
+                  in_package && /^$/ { in_package=0 }
+                '
+          )"
+          TARGET_DEB_VERSION="${TAG#v}-1"
+
+          if [[ -n "$CURRENT_DEB_VERSION" ]] &&
+             ! dpkg --compare-versions "$TARGET_DEB_VERSION" gt "$CURRENT_DEB_VERSION"; then
+            echo "APT already publishes $CURRENT_DEB_VERSION; $TAG does not require deployment."
+            exit 0
+          fi
+
+          echo "A newer stable release is pending: $TAG (APT currently: ${CURRENT_DEB_VERSION:-none})."
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: release-check
+    if: needs.release-check.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -160,7 +234,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.release_tag }}
+          ref: ${{ needs.release-check.outputs.release_tag }}
           persist-credentials: false
 
       - name: Install Debian build and repository tools
@@ -173,7 +247,7 @@ jobs:
 
       - name: Validate release metadata and run all NETWATCH NG tests
         env:
-          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.release-check.outputs.release_tag }}
           DEBFULLNAME: NETWATCH NG maintainers
           DEBEMAIL: 177128114+sudomarc@users.noreply.github.com
         run: |

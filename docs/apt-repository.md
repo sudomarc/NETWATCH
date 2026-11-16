@@ -89,15 +89,18 @@ After the first Pages deployment succeeds, add the public key and repository:
 curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \
   | sudo gpg --dearmor -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg
 
-echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \
   | sudo tee /etc/apt/sources.list.d/netwatch-ng.list
 
 sudo apt update
 sudo apt install netwatch-ng
 ```
 
-The repository index targets Debian `amd64` systems. The `.deb` itself is
-an architecture-independent Python package.
+The repository index targets Debian `amd64` systems. Its source entry uses
+`arch=amd64` so APT does not request an unsupported `i386` index. This is a
+per-repository setting: do not remove the system-wide `i386` architecture if
+other installed applications need 32-bit packages. The `.deb` itself is an
+architecture-independent Python package.
 
 Do not treat the repository as ready until the first real Pages deployment
 has completed and the public key, index, and package signature have been

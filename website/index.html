@@ -130,7 +130,7 @@
           <h3>Via the official APT repository</h3>
           <p>Recommended method: signed repository published on GitHub Pages, <strong>netwatch-ng</strong> package 2.0.0-1 (<code>stable</code> suite, <code>main</code> component, amd64 architectures). Works on Debian and antiX.</p>
           <div class="install-cmd" role="group" aria-label="Official APT repository configuration">
-            <code id="cmd-apt">sudo install -d -m 0755 /usr/share/keyrings<br><br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+            <code id="cmd-apt">sudo install -d -m 0755 /usr/share/keyrings<br><br>curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br><br>echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br><br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
             <button class="copy-btn" data-copy-target="cmd-apt" aria-label="Copy official APT repository configuration">
               <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
             </button>
@@ -394,7 +394,7 @@
       </div>
       <div class="cta-install reveal">
         <div class="install-cmd install-cmd-dark" role="group" aria-label="APT repository configuration and installation">
-          <code id="cmd-cta">curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
+          <code id="cmd-cta">curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \<br>&nbsp;&nbsp;| sudo gpg --dearmor --yes -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg<br>echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \<br>&nbsp;&nbsp;| sudo tee /etc/apt/sources.list.d/netwatch-ng.list<br>sudo apt update &amp;&amp; sudo apt install netwatch-ng</code>
           <button class="copy-btn copy-btn-light" data-copy-target="cmd-cta" aria-label="Copy APT installation command">
             <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
           </button>

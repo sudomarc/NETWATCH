@@ -87,7 +87,7 @@ Add the repository and install:
 curl -fsSL https://sudomarc.github.io/NETWATCH/public.key \
   | sudo gpg --dearmor -o /usr/share/keyrings/netwatch-ng-archive-keyring.gpg
 
-echo "deb [signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/netwatch-ng-archive-keyring.gpg] https://sudomarc.github.io/NETWATCH/ stable main" \
   | sudo tee /etc/apt/sources.list.d/netwatch-ng.list
 
 sudo apt update
