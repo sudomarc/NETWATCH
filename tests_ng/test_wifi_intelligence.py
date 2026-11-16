@@ -302,6 +302,9 @@ def test_scan_networks_validates_and_uses_argv(monkeypatch, tmp_path):
         "netwatch_ng.wifi_intelligence._read_latest_airodump_csv",
         lambda directory, prefix="scan-": AIRODUMP_CSV,
     )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
+    )
     survey = scan_networks("wlan0", timeout=5)
     assert isinstance(survey, WifiSurvey)
     assert survey.interface == "wlan0"
@@ -323,6 +326,9 @@ def test_scan_networks_airodump_binary_not_found(monkeypatch):
             BinaryNotFound("airodump-ng")
         ),
     )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
+    )
     with pytest.raises(BinaryNotFound):
         scan_networks("wlan0")
 
@@ -334,6 +340,9 @@ def test_scan_networks_airodump_failure(monkeypatch):
             "", "Interface wlan0 doesn't support monitor mode\n", returncode=1
         ),
     )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
+    )
     with pytest.raises(RuntimeError, match="airodump-ng survey failed"):
         scan_networks("wlan0")
 
@@ -344,6 +353,9 @@ def test_scan_networks_timeout_is_normal_stop(monkeypatch, tmp_path):
         lambda argv, timeout, cancel_event: (_ for _ in ()).throw(
             subprocess.TimeoutExpired(argv, timeout)
         ),
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
     )
     survey = scan_networks("wlan0", timeout=1)
     assert survey.access_points == []
@@ -357,6 +369,9 @@ def test_scan_networks_cancellation_is_normal_stop(monkeypatch, tmp_path):
         lambda argv, timeout, cancel_event: (_ for _ in ()).throw(
             CommandCancelled("command cancelled: airodump-ng")
         ),
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
     )
     survey = scan_networks("wlan0", timeout=5, cancel_event=event)
     assert survey.access_points == []
@@ -532,6 +547,9 @@ def test_scan_networks_invokes_run_cancellable_never_run(monkeypatch):
     monkeypatch.setattr(
         "netwatch_ng.wifi_intelligence._read_latest_airodump_csv",
         lambda directory, prefix="scan-": "",
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
     )
     scan_networks("wlan0", timeout=2)
     assert seen and seen[0][0] == "airodump-ng"

@@ -40,7 +40,7 @@ def test_draw_header_identity_version_mode_and_separator():
     app_module._draw_header(stdscr, 24, 100, "Dashboard", enabled=False)
     row0 = [w[2] for w in _writes_at(stdscr, 0)]
     assert any("NETWATCH NG" in text for text in row0)
-    assert any("v2.0.0-dev" in text for text in row0)
+    assert any("v2.0.0.dev1" in text for text in row0)
     assert any("[Dashboard]" in text for text in row0)
     row1 = [w[2] for w in _writes_at(stdscr, 1)]
     assert any(set(text) == {"─"} for text in row1)

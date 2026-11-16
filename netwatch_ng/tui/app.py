@@ -808,12 +808,12 @@ def run(stdscr) -> None:
                     wifi_scan = executor.submit(_scan_wifi, wifi_cancel)
             elif key in (ord("m"), ord("M")) and label == "Wi-Fi Intelligence":
                 if wifi_scan is not None:
-                    wifi_message = "Un sondage Wi-Fi est en cours ; réessayez après l'arrêt du sondage."
+                    wifi_message = "A Wi-Fi survey is in progress; try again after the survey stops."
                 else:
                     try:
                         interfaces = wifi_intelligence.list_wireless_interfaces()
                     except Exception as exc:  # noqa: BLE001 - surface engine errors to the operator
-                        wifi_message = f"Impossible de lister les interfaces Wi-Fi: {exc}"
+                        wifi_message = f"Unable to list wireless interfaces: {exc}"
                     else:
                         preferred = settings.load_settings()["preferred_interface"]
                         candidates = [item.name for item in interfaces]
@@ -823,7 +823,7 @@ def run(stdscr) -> None:
                             else (candidates[0] if candidates else None)
                         )
                         if not target:
-                            wifi_message = "Aucune interface sans fil détectée."
+                            wifi_message = "No wireless interface detected."
                         else:
                             monitor_target = wifi_monitor_interface or next(
                                 (item.name for item in interfaces if item.mode == "monitor"),
@@ -835,29 +835,29 @@ def run(stdscr) -> None:
                                     if wifi_monitor_interface == target:
                                         wifi_monitor_interface = None
                                     wifi_message = (
-                                        f"Mode monitor arrêté sur {target}; l'interface est "
-                                        f"restaurée en mode géré."
+                                        f"Monitor mode stopped on {target}; the interface is "
+                                        f"restored to managed mode."
                                     )
                                 except Exception as exc:  # noqa: BLE001
-                                    wifi_message = f"Arrêt du mode monitor sur {target} échoué: {exc}"
+                                    wifi_message = f"Stopping monitor mode on {target} failed: {exc}"
                             else:
                                 prompt = (
-                                    f"ATTENTION: passer {target} en mode monitor interrompra "
-                                    f"la connexion Wi-Fi active sur cette interface "
-                                    f"(désassociation possible). Confirmer ? (o/N) "
+                                    f"WARNING: switching {target} to monitor mode will interrupt "
+                                    f"the active Wi-Fi connection on this interface "
+                                    f"(disassociation possible). Confirm? (y/N) "
                                 )
                                 if _confirm_blocking(stdscr, prompt):
                                     try:
                                         monitor_name = wifi_intelligence.start_monitor_mode(target)
                                         wifi_monitor_interface = monitor_name
                                         wifi_message = (
-                                            f"Mode monitor activé sur {monitor_name} (à partir de {target}); "
-                                            f"la connexion Wi-Fi de {target} est interrompue."
+                                            f"Monitor mode enabled on {monitor_name} (from {target}); "
+                                            f"the Wi-Fi connection of {target} is interrupted."
                                         )
                                     except Exception as exc:  # noqa: BLE001
-                                        wifi_message = f"Activation du mode monitor sur {target} échouée: {exc}"
+                                        wifi_message = f"Enabling monitor mode on {target} failed: {exc}"
                                 else:
-                                    wifi_message = "Activation du mode monitor annulée."
+                                    wifi_message = "Monitor mode activation cancelled."
                 previous_selected = None
             elif key in (ord("p"), ord("P")) and label == "Network Diagnostics":
                 if diagnostic_task is None:

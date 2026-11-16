@@ -49,3 +49,17 @@ def test_privileged_dir_accepted_if_new(tmp_path, monkeypatch):
     result = config.get_config_dir()
     assert result == target
     assert result.exists()
+
+
+def test_package_version_matches_pyproject():
+    """Single source of truth: __version__ must match pyproject.toml."""
+    import re
+    from pathlib import Path
+
+    import netwatch_ng
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
+    match = re.search(r'^version = "([^"]+)"$', text, re.MULTILINE)
+    assert match is not None, "pyproject.toml must declare a project version"
+    assert netwatch_ng.__version__ == match.group(1)

@@ -1,6 +1,6 @@
 """Safe process execution helpers.
 
-Rules enforced here (see AGENTS.md / CONTRIBUTING.md):
+Rules enforced here (see CONTRIBUTING.md):
   - never build a shell string from user input: always pass argv lists;
   - never use shell=True;
   - always bound external calls with a timeout;
