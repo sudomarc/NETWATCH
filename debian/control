@@ -20,6 +20,7 @@ Depends:
  iproute2
 Recommends:
  iptables,
+ ip6tables,
  nmap,
  iw,
  rfkill
