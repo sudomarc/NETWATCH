@@ -1,0 +1,68 @@
+name: Validate NETWATCH NG APT signing key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-signing-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install GnuPG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gnupg
+
+      - name: Import key, sign test metadata and verify with public key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          test -n "$APT_GPG_PRIVATE_KEY" || { echo "Missing APT_GPG_PRIVATE_KEY secret"; exit 1; }
+          test -n "$APT_GPG_KEY_ID" || { echo "Missing APT_GPG_KEY_ID secret"; exit 1; }
+          test -n "$APT_GPG_PASSPHRASE" || { echo "Missing APT_GPG_PASSPHRASE secret"; exit 1; }
+          [[ "$APT_GPG_KEY_ID" =~ ^[A-Fa-f0-9]{40}$ ]] || {
+            echo "APT_GPG_KEY_ID must be the full 40-character primary-key fingerprint"
+            exit 1
+          }
+
+          SIGN_HOME="$(mktemp -d)"
+          VERIFY_HOME="$(mktemp -d)"
+          WORK_DIR="$(mktemp -d)"
+          chmod 700 "$SIGN_HOME" "$VERIFY_HOME"
+          export GNUPGHOME="$SIGN_HOME"
+          cleanup() {
+            GNUPGHOME="$SIGN_HOME" gpgconf --kill all >/dev/null 2>&1 || true
+            rm -rf -- "$SIGN_HOME" "$VERIFY_HOME" "$WORK_DIR"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          ACTUAL_FINGERPRINT="$(gpg --batch --with-colons --list-secret-keys "$APT_GPG_KEY_ID" \
+            | awk -F: '$1 == "fpr" { print toupper($10); exit }')"
+          EXPECTED_FINGERPRINT="$(printf '%s' "$APT_GPG_KEY_ID" | tr '[:lower:]' '[:upper:]')"
+          test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT" || {
+            echo "Imported private key does not match APT_GPG_KEY_ID"
+            exit 1
+          }
+
+          printf 'Origin: NETWATCH NG\nSuite: stable\nCodename: signing-self-test\n' > "$WORK_DIR/Release"
+
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --clearsign --output "$WORK_DIR/InRelease" "$WORK_DIR/Release"
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --detach-sign --output "$WORK_DIR/Release.gpg" "$WORK_DIR/Release"
+          gpg --armor --export "$APT_GPG_KEY_ID" > "$WORK_DIR/public.key"
+
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --import "$WORK_DIR/public.key"
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify "$WORK_DIR/Release.gpg" "$WORK_DIR/Release"
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify "$WORK_DIR/InRelease"
+
+          echo "APT signing key validation passed. No repository was published."
