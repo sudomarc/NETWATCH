@@ -26,7 +26,7 @@ python3 -m http.server 8765
 
 ## Verified content
 
-All texts come from the actual repository: `README.md`, `CHANGELOG.md`, `docs/NETWATCH_DESIGN_SYSTEM.md`, `docs/apt-repository.md`, `netwatch_ng/tui/app.py`, and the verified state of the published APT repository (`dists/stable/Release`, `Packages`, `InRelease`, `Release.gpg`, `netwatch-ng_2.1.0-1_all.deb`). No invented features; unimplemented capabilities are explicitly described as such (no HTB, no SNMP/firmware fingerprinting).
+All texts come from the actual repository: `README.md`, `CHANGELOG.md`, `docs/NETWATCH_DESIGN_SYSTEM.md`, `docs/apt-repository.md`, `netwatch_ng/tui/app.py`, and the verified state of the published APT repository (`dists/stable/Release`, `Packages`, `InRelease`, `Release.gpg`, `netwatch-ng_2.1.1_all.deb`). No invented features; unimplemented capabilities are explicitly described as such (no HTB, no SNMP/firmware fingerprinting).
 
 ## Accessibility and performance
 

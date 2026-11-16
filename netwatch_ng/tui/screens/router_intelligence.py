@@ -13,46 +13,75 @@ def build_router_lines(
     report: RouterReport | None = None,
     services: list[ManagementService] | None = None,
     message: str | None = None,
-) -> list[str]:
+) -> list:
+    """Return screen content lines, including table specs.
+
+    A table spec is a tuple: ``("TABLE", headers, rows[, col_widths])``.
+    """
     try:
         if report is None:
             report = inspect_default_gateway()
     except Exception as exc:
-        return ["ROUTER INTELLIGENCE", "", f"  [ERROR] router inspection failed: {exc}"]
+        return [
+            "ROUTER INTELLIGENCE",
+            "",
+            ("TABLE", ["Error", "Detail"], [
+                ["Router inspection", f"failed: {exc}"],
+            ]),
+        ]
 
     if report is None:
         return [
             "ROUTER INTELLIGENCE",
             "",
             "GATEWAY",
-            "  [DEGRADED] no default IPv4 or IPv6 gateway is configured.",
+            ("TABLE", ["Status", "Detail"], [
+                ["[DEGRADED]", "no default IPv4 or IPv6 gateway is configured."],
+            ]),
         ]
 
     lines = [
         "ROUTER INTELLIGENCE",
         "",
         "GATEWAY",
-        f"  Gateway: [READY] {report.gateway} ({report.family})",
-        f"  Interface: {report.interface or 'unknown'}",
-        f"  Gateway MAC: {report.mac or 'not present in neighbor table'}",
+    ]
+    gateway_rows = [
+        ["Gateway", f"{report.gateway} ({report.family})"],
+        ["Interface", report.interface or "unknown"],
+        ["Gateway MAC", report.mac or "not present in neighbor table"],
     ]
     if report.manufacturer:
-        lines.append(
-            f"  Manufacturer hint: {report.manufacturer} "
-            "(local OUI match; model/firmware unverified)"
+        gateway_rows.append(
+            ["Manufacturer hint", f"{report.manufacturer} (local OUI match; model/firmware unverified)"]
         )
     else:
-        lines.append("  Manufacturer hint: unavailable (no local OUI match)")
-    lines.append(f"  Local interface addresses: {', '.join(report.local_addresses) or 'unavailable'}")
+        gateway_rows.append(["Manufacturer hint", "unavailable (no local OUI match)"])
+    gateway_rows.append(
+        ["Local interface addresses", ", ".join(report.local_addresses) or "unavailable"]
+    )
+    lines.append(("TABLE", ["Field", "Value"], gateway_rows))
+
     lines.append("")
     lines.append("MANAGEMENT PORTS")
     if services is None:
-        lines.append("  [INFO] press p to check common TCP management ports on this gateway.")
-        lines.append("         u: read-only UPnP/SSDP check   r: refresh")
+        lines.append(
+            ("TABLE", ["Action", "Detail"], [
+                ["p", "check common TCP management ports on this gateway."],
+                ["u", "read-only UPnP/SSDP check."],
+                ["r", "refresh."],
+            ])
+        )
     else:
-        lines.append(f"  TCP management port reachability ({len(services)} port(s)):")
+        port_rows = []
         for service in services:
-            lines.append(f"    TCP/{service.port} {service.name}: {service.state}")
+            port_rows.append([
+                f"TCP/{service.port}",
+                service.name,
+                service.state,
+            ])
+        lines.append(
+            ("TABLE", ["Port", "Service", "State"], port_rows, [10, 20, 10])
+        )
         lines.append("  These are reachability checks, not service/version verification.")
     if message:
         lines.extend(["", message])

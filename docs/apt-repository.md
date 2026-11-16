@@ -58,7 +58,7 @@ before anything is deployed.
 
 To publish or retry an existing stable release manually, open Actions → CI →
 Run workflow, select `main`, and enter its tag in `release_tag` (for example
-`v2.1.0`). Leave `release_tag` empty to run CI checks only. The release job
+`v2.1.1`). Leave `release_tag` empty to run CI checks only. The release job
 still validates that the tag is a stable `v2.X.Y` release.
 
 ## 5. Publish a stable release

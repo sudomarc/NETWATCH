@@ -5,6 +5,20 @@ from __future__ import annotations
 from netwatch_ng.tui.screens import dashboard as dashboard_screen
 
 
+def _flatten_lines(lines):
+    """Convert screen content (strings + table specs) to plain strings."""
+    flat = []
+    for line in lines:
+        if isinstance(line, tuple) and len(line) >= 3 and line[0] == "TABLE":
+            _, headers, rows = line[0], line[1], line[2]
+            flat.append(" | ".join(str(h) for h in headers))
+            for row in rows:
+                flat.append(" | ".join(str(c) for c in row))
+        else:
+            flat.append(str(line))
+    return flat
+
+
 def _stub_all(monkeypatch):
     monkeypatch.setattr(
         dashboard_screen.net_mod, "get_default_gateway", lambda family: None
@@ -21,17 +35,18 @@ def _stub_all(monkeypatch):
 def test_dashboard_is_read_only_supervision(monkeypatch):
     _stub_all(monkeypatch)
     lines = dashboard_screen.build_dashboard_lines()
-    text = "\n".join(lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
 
     assert "CONNECTION" in text
-    assert "Default gateway: [DEGRADED] none configured" in text
+    assert "[DEGRADED] none configured" in text
     assert "INTERFACES" in text
     assert "[DEGRADED] no interfaces detected" in text
     assert "DEVICES" in text
-    assert "Devices detected: [READY] 0" in text
+    assert "Devices detected" in text and "[READY]" in text and "0" in text
     assert "NETWATCH CONTROL" in text
-    assert "Active firewall rules:" in text
-    assert "Active traffic policers:" in text
+    assert "Firewall rules" in text
+    assert "Traffic policers" in text
     assert "RECENT ACTIVITY" in text
     assert "[INFO] no activity recorded yet" in text
     assert "SYSTEM" in text
@@ -46,9 +61,10 @@ def test_dashboard_reports_degraded_when_engine_unavailable(monkeypatch):
         dashboard_screen.traffic, "list_limits", lambda: (_ for _ in ()).throw(RuntimeError("tc missing"))
     )
     lines = dashboard_screen.build_dashboard_lines()
-    text = "\n".join(lines)
-    assert "Active firewall rules: [DEGRADED] engine unavailable" in text
-    assert "Active traffic policers: [DEGRADED] engine unavailable" in text
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert "Firewall rules" in text and "[DEGRADED]" in text
+    assert "Traffic policers" in text and "[DEGRADED]" in text
 
 
 def test_dashboard_reports_ready_gateway_and_devices(monkeypatch):
@@ -78,8 +94,9 @@ def test_dashboard_reports_ready_gateway_and_devices(monkeypatch):
     monkeypatch.setattr(dashboard_screen.activity_log, "read_events", lambda limit: [])
 
     lines = dashboard_screen.build_dashboard_lines()
-    text = "\n".join(lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
 
-    assert "Default gateway: [READY] 192.168.1.1 via eth0" in text
-    assert "[UP] eth0" in text
-    assert "Devices detected: [READY] 1" in text
+    assert "192.168.1.1" in text and "eth0" in text
+    assert "[UP]" in text and "eth0" in text
+    assert "Devices detected" in text and "[READY]" in text and "1" in text

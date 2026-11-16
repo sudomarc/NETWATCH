@@ -126,6 +126,117 @@ def paint_line(stdscr, y: int, x: int, max_x: int, line: str, enabled: bool, tit
     return 1
 
 
+def _calc_col_widths(headers: list[str], rows: list[list[str]], available: int) -> list[int]:
+    """Calculate column widths that fit within ``available`` characters.
+
+    Each column gets at least its header length; extra space is distributed
+    proportionally. When the content is too wide, columns are truncated to a
+    minimum of 3 characters each.
+    """
+    ncols = len(headers)
+    if ncols == 0:
+        return []
+    mins = [max(len(str(h)), 3) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if i < ncols:
+                mins[i] = max(mins[i], len(str(cell)))
+    total_min = sum(mins) + 2 * (ncols - 1)  # two spaces between columns
+    if total_min <= available:
+        extra = available - total_min
+        total_weight = sum(mins) if sum(mins) > 0 else ncols
+        widths = []
+        remaining = extra
+        for i in range(ncols):
+            if i < ncols - 1:
+                add = int(extra * mins[i] / total_weight)
+            else:
+                add = remaining
+            widths.append(mins[i] + add)
+            remaining -= add
+        return widths
+    # Too wide: equal split with a minimum of 3 chars per column.
+    per_col = max(3, (available - 2 * (ncols - 1)) // ncols)
+    return [per_col] * ncols
+
+
+def paint_table(
+    stdscr, y: int, x: int, max_x: int,
+    headers: list[str], rows: list[list[str]],
+    enabled: bool, col_widths: list[int] | None = None,
+    sep: str = "  ",
+) -> int:
+    """Paint a simple column-aligned table (no vertical borders).
+
+    Layout:
+        ═════════════════════════════════════
+         HEADER1      HEADER2      HEADER3
+        ────────────────────────────────────
+         value1       value2       value3
+        ════════════════════════════════════
+
+    Returns the number of rows consumed (header + separator + data rows
+    + top/bottom borders = len(rows) + 4).
+    """
+    width = max_x - x
+    if width <= 0 or y < 0:
+        return 0
+    ncols = len(headers)
+    if ncols == 0:
+        return 0
+
+    if col_widths is None:
+        col_widths = _calc_col_widths(headers, rows, width)
+
+    # Ensure the table fits within max_x.
+    total = sum(col_widths) + len(sep) * (ncols - 1)
+    if total > width:
+        scale = (width - len(sep) * (ncols - 1)) / sum(col_widths)
+        col_widths = [max(1, int(w * scale)) for w in col_widths]
+
+    border_attr = theme.attr(theme.BORDER, enabled)
+    header_attr = theme.attr(theme.ACCENT, enabled, bold=True)
+    body_attr = theme.attr(theme.BODY, enabled)
+
+    top_char = "═" if not USE_ASCII_BOX else "="
+    sep_char = "─" if not USE_ASCII_BOX else "-"
+
+    table_width = sum(col_widths) + len(sep) * (ncols - 1)
+    draw_w = min(table_width, width)
+
+    # Top border
+    addstr_safe(stdscr, y, x, top_char * draw_w, border_attr)
+    y += 1
+
+    # Header row
+    header_cells = [
+        str(headers[i]).ljust(col_widths[i])[: col_widths[i]] for i in range(ncols)
+    ]
+    addstr_safe(stdscr, y, x, sep.join(header_cells)[:width], header_attr)
+    y += 1
+
+    # Separator
+    addstr_safe(stdscr, y, x, sep_char * draw_w, border_attr)
+    y += 1
+
+    # Data rows
+    for row in rows:
+        if y >= max_x - x and y < 0:
+            break
+        cells = [
+            str(cell).ljust(col_widths[i])[: col_widths[i]]
+            for i, cell in enumerate(row)
+        ]
+        addstr_safe(stdscr, y, x, sep.join(cells)[:width], body_attr)
+        y += 1
+
+    # Bottom border
+    addstr_safe(stdscr, y, x, top_char * draw_w, border_attr)
+    y += 1
+
+    return len(rows) + 4
+
+
 def draw_panel(stdscr, y: int, x: int, h: int, w: int, title: str | None = None,
                enabled: bool = False) -> tuple[int, int, int, int]:
     """Draw a bordered panel and return the inner content region.

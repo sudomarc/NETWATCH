@@ -1,4 +1,4 @@
-"""Devices screen for passive inventory and operator-triggered Nmap scans."""
+"""Devices screen for passive inventory and automatic Nmap discovery + service scan."""
 
 from __future__ import annotations
 
@@ -8,16 +8,22 @@ from netwatch_ng.discovery import history
 from netwatch_ng.system.config import get_config_dir
 
 
-def build_devices_lines(active_devices=None, message: str | None = None) -> list[str]:
-    lines: list[str] = []
+def build_devices_lines(active_devices=None, message: str | None = None) -> list:
+    """Return screen content lines, including table specs.
+
+    A table spec is a tuple: ``("TABLE", headers, rows[, col_widths])``.
+    """
+    lines: list = []
 
     if which("ip") is None:
         return [
             "DEVICES",
             "",
             "ENGINE",
-            "  [ERROR] 'ip' (iproute2) not installed — cannot read the neighbor table.",
-            "  See System Manager.",
+            ("TABLE", ["Issue", "Detail"], [
+                ["'ip' (iproute2)", "not installed — cannot read the neighbor table."],
+                ["Action", "See System Manager."],
+            ]),
         ]
 
     found = devices_mod.passive_scan("inet")
@@ -38,34 +44,64 @@ def build_devices_lines(active_devices=None, message: str | None = None) -> list
     lines.append("DEVICES")
     lines.append("")
     lines.append("INVENTORY")
-    lines.append(f"  Mode: {mode}")
-    lines.append(f"  Devices detected: [READY] {len(display_devices)}")
+    lines.append(
+        ("TABLE", ["Field", "Value"], [
+            ["Mode", mode],
+            ["Devices detected", f"[READY] {len(display_devices)}"],
+        ])
+    )
     if active_devices is None:
         lines.append("  n: active Nmap discovery   v: service/version scan for one host")
         lines.append("  e: export current inventory to JSON or CSV   r: refresh")
     lines.append("")
-    if not found:
+
+    if not display_devices:
         lines.append("  [DEGRADED] no live neighbor-table entries.")
         lines.append("     Generate traffic (e.g. ping the subnet) or wait for the ARP cache")
         lines.append("     to populate, then revisit.")
-    for d in display_devices:
-        hostname = d.hostname.value if d.hostname else "-"
-        ports = ",".join(str(port) for port in d.open_ports) or "-"
-        services = ",".join(d.services) or "-"
+    else:
+        device_rows = []
+        for d in display_devices:
+            hostname = d.hostname.value if d.hostname else "-"
+            ports = ",".join(str(port) for port in d.open_ports) or "-"
+            services = ",".join(d.services) or "-"
+            device_rows.append([
+                d.ip,
+                d.mac or "-",
+                d.describe_vendor(),
+                hostname,
+                ports,
+                services,
+            ])
         lines.append(
-            f"  {d.ip:<16} mac={d.mac or '-':<17} vendor={d.describe_vendor():<30} host={hostname}"
+            (
+                "TABLE",
+                ["IP", "MAC", "Vendor", "Hostname", "Open ports", "Services"],
+                device_rows,
+                [16, 18, 24, 20, 12, 12],
+            )
         )
         if active_devices is not None:
-            lines.append(f"    open ports={ports} services={services}")
-            if d.hostname:
-                lines.append(f"    hostname source={d.hostname.source} confidence={d.hostname.confidence.value}")
-            if d.vendor:
-                lines.append(f"    vendor source={d.vendor.source} confidence={d.vendor.confidence.value}")
+            for d in display_devices:
+                if d.hostname:
+                    lines.append(
+                        f"    {d.ip}: hostname source={d.hostname.source} confidence={d.hostname.confidence.value}"
+                    )
+                if d.vendor:
+                    lines.append(
+                        f"    {d.ip}: vendor source={d.vendor.source} confidence={d.vendor.confidence.value}"
+                    )
 
     if diff is not None:
         lines.append("")
         lines.append("DETECTION DELTA")
-        lines.append(f"  Since last scan — new: [READY] {len(diff.new)}  missing: [WARNING] {len(diff.missing)}  reappeared: [INFO] {len(diff.reappeared)}")
+        lines.append(
+            ("TABLE", ["Change", "Count"], [
+                ["New", f"[READY] {len(diff.new)}"],
+                ["Missing", f"[WARNING] {len(diff.missing)}"],
+                ["Reappeared", f"[INFO] {len(diff.reappeared)}"],
+            ])
+        )
         if diff.new:
             lines.append(f"  new: {', '.join(diff.new)}")
         if diff.missing:

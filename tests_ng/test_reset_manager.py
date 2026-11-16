@@ -4,6 +4,20 @@ from netwatch_ng import firewall, reset_manager, traffic
 from netwatch_ng.tui.screens import reset_manager as reset_screen
 
 
+def _flatten_lines(lines):
+    """Convert screen content (strings + table specs) to plain strings."""
+    flat = []
+    for line in lines:
+        if isinstance(line, tuple) and len(line) >= 3 and line[0] == "TABLE":
+            _, headers, rows = line[0], line[1], line[2]
+            flat.append(" | ".join(str(h) for h in headers))
+            for row in rows:
+                flat.append(" | ".join(str(c) for c in row))
+        else:
+            flat.append(str(line))
+    return flat
+
+
 def test_preview_reset_is_read_only(monkeypatch):
     rules = [firewall.FirewallRule("inet", "FORWARD", "192.168.1.50", "DROP", "NETWATCH")]
     limits = [traffic.TrafficLimit("eth0", "egress", 512, "pref-49152")]
@@ -29,8 +43,9 @@ def test_reset_screen_never_calls_destructive_reset(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError("screen triggered reset")),
     )
     lines = reset_screen.build_reset_lines()
-    text = "\n".join(lines)
-    assert any("No changes have been made" in line for line in lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert any("No changes have been made" in line for line in flat)
     assert "preview" in text.lower()
     assert "reset" in text.lower()
 

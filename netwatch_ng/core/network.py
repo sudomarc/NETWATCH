@@ -6,11 +6,13 @@ raises only on a genuinely broken environment (missing `ip` binary).
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from netwatch_ng.core.interfaces import list_interfaces
 from netwatch_ng.core.shell import run
 
 
@@ -38,6 +40,33 @@ def get_default_gateway(family: str = "inet") -> Route | None:
         device=r.get("dev"),
         protocol=r.get("protocol"),
     )
+
+
+def get_local_subnet(family: str = "inet") -> str | None:
+    """Return the CIDR subnet of the default-route interface, e.g. ``192.168.1.0/24``.
+
+    Resolves the default gateway, finds the interface it uses, reads that
+    interface's configured address + prefix length, and computes the network
+    CIDR. Returns ``None`` when there is no default route or no address on the
+    interface. Raises only on a genuinely broken environment (missing `ip`).
+    """
+    route = get_default_gateway(family)
+    if route is None or not route.device:
+        return None
+    for iface in list_interfaces():
+        if iface.name != route.device:
+            continue
+        addrs = iface.ipv4_addresses if family == "inet" else iface.ipv6_addresses
+        for addr in addrs:
+            if addr.address and addr.prefix_len:
+                try:
+                    network = ipaddress.ip_network(
+                        f"{addr.address}/{addr.prefix_len}", strict=False
+                    )
+                    return str(network)
+                except ValueError:
+                    continue
+    return None
 
 
 def get_routes(family: str = "inet") -> list[Route]:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import curses
 
+from netwatch_ng.discovery import device_intelligence
+from netwatch_ng.discovery.nmap_scan import NmapHost, Port
 from netwatch_ng.tui import app as app_module
 
 
@@ -148,3 +150,230 @@ def test_run_restores_monitor_interface_on_exit(monkeypatch):
     monkeypatch.setattr(app_module, "_screen_lines", lambda *a, **k: ["DASHBOARD"])
     app_module.run(_QuitScreen())
     assert restored  # exit path invoked the restore helper
+
+
+class _RefreshScreen(FakeStdscr):
+    """Fake screen: DOWN to Devices, then 'r' refresh, then 'q' quit."""
+
+    def __init__(self):
+        super().__init__()
+        self._keys = iter([curses.KEY_DOWN, ord("r"), ord("q")])
+
+    def keypad(self, value):
+        pass
+
+    def timeout(self, value):
+        pass
+
+    def getch(self):
+        return next(self._keys)
+
+    def move(self, y, x):
+        pass
+
+    def clrtoeol(self):
+        pass
+
+    def addstr(self, y, x, text, attr=0):
+        self.writes.append((y, x, text, attr))
+
+
+def test_refresh_devices_relaunches_active_scan(monkeypatch):
+    """Pressing 'r' on the Devices screen re-launches an active Nmap scan."""
+
+    class _FakeFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def done(self):
+            return True
+
+        def result(self):
+            return self._result
+
+        def cancel(self):
+            return False
+
+    class _FakeExecutor:
+        """Executor that runs submitted tasks synchronously (deterministic tests)."""
+
+        def submit(self, fn, *args, **kwargs):
+            result = fn(*args, **kwargs)
+            return _FakeFuture(result)
+
+        def shutdown(self, **kwargs):
+            pass
+
+    submitted_targets = []
+
+    def fake_active_scan(targets, timeout=60.0, cancel_event=None):
+        submitted_targets.append(targets)
+        return _FakeFuture([])
+
+    monkeypatch.setattr(curses, "curs_set", lambda value: None)
+    monkeypatch.setattr(app_module, "_configure_colors", lambda mode: False)
+    monkeypatch.setattr(app_module, "_restore_monitor_interface", lambda interface: None)
+    monkeypatch.setattr(app_module, "_test_utf8_box", lambda stdscr: True)
+    monkeypatch.setattr(app_module, "show_splash", lambda stdscr, colors: None)
+    monkeypatch.setattr(app_module, "_screen_lines", lambda *a, **k: ["DASHBOARD"])
+    monkeypatch.setattr(app_module, "ThreadPoolExecutor", lambda *a, **k: _FakeExecutor())
+    monkeypatch.setattr(
+        app_module.settings,
+        "load_settings",
+        lambda: {
+            "refresh_seconds": 0,
+            "color_mode": "mono",
+            "scan_timeout_seconds": 60.0,
+            "preferred_interface": None,
+        },
+    )
+    monkeypatch.setattr(
+        app_module.network, "get_local_subnet", lambda family="inet": "192.168.1.0/24"
+    )
+    monkeypatch.setattr(app_module.devices_mod, "active_scan", fake_active_scan)
+
+    class _RefreshScreen(FakeStdscr):
+        """Fake screen: DOWN to Devices, then 'r' refresh, then 'q' quit."""
+
+        def __init__(self):
+            super().__init__()
+            self._keys = iter([curses.KEY_DOWN, ord("r"), ord("q")])
+
+        def keypad(self, value):
+            pass
+
+        def timeout(self, value):
+            pass
+
+        def getch(self):
+            return next(self._keys)
+
+        def move(self, y, x):
+            pass
+
+        def clrtoeol(self):
+            pass
+
+        def addstr(self, y, x, text, attr=0):
+            self.writes.append((y, x, text, attr))
+
+    app_module.run(_RefreshScreen())
+
+    # First active scan: auto-launched on first entry to Devices.
+    # Second active scan: triggered by pressing 'r' (refresh).
+    assert len(submitted_targets) == 2
+    assert submitted_targets[0] == "192.168.1.0/24"
+    assert submitted_targets[1] == "192.168.1.0/24"
+
+
+def test_auto_service_scan_runs_for_all_discovered_devices(monkeypatch):
+    """Every device discovered by the automatic active scan gets an
+    automatic service/version scan without operator intervention."""
+
+    class _FakeFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def done(self):
+            return True
+
+        def result(self):
+            return self._result
+
+        def cancel(self):
+            return False
+
+    class _FakeExecutor:
+        def submit(self, fn, *args, **kwargs):
+            result = fn(*args, **kwargs)
+            return _FakeFuture(result)
+
+        def shutdown(self, **kwargs):
+            pass
+
+    discovered_devices = [
+        device_intelligence.Device(ip="192.168.1.10"),
+        device_intelligence.Device(ip="192.168.1.11"),
+        device_intelligence.Device(ip="192.168.1.12"),
+    ]
+
+    service_scan_targets: list[str] = []
+
+    def fake_active_scan(targets, timeout=60.0, cancel_event=None):
+        return discovered_devices
+
+    def fake_service_scan(target, timeout=120.0, cancel_event=None):
+        service_scan_targets.append(target)
+        return NmapHost(
+            ip=target,
+            mac=None,
+            nmap_vendor=None,
+            hostname=None,
+            up=True,
+            ports=[
+                Port(
+                    number=80,
+                    protocol="tcp",
+                    state="open",
+                    service="http",
+                    product=None,
+                    version=None,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(curses, "curs_set", lambda value: None)
+    monkeypatch.setattr(app_module, "_configure_colors", lambda mode: False)
+    monkeypatch.setattr(app_module, "_restore_monitor_interface", lambda interface: None)
+    monkeypatch.setattr(app_module, "_test_utf8_box", lambda stdscr: True)
+    monkeypatch.setattr(app_module, "show_splash", lambda stdscr, colors: None)
+    monkeypatch.setattr(app_module, "_screen_lines", lambda *a, **k: ["DASHBOARD"])
+    monkeypatch.setattr(app_module, "ThreadPoolExecutor", lambda *a, **k: _FakeExecutor())
+    monkeypatch.setattr(
+        app_module.settings,
+        "load_settings",
+        lambda: {
+            "refresh_seconds": 0,
+            "color_mode": "mono",
+            "scan_timeout_seconds": 60.0,
+            "preferred_interface": None,
+        },
+    )
+    monkeypatch.setattr(
+        app_module.network, "get_local_subnet", lambda family="inet": "192.168.1.0/24"
+    )
+    monkeypatch.setattr(app_module.devices_mod, "active_scan", fake_active_scan)
+    monkeypatch.setattr(app_module.nmap_scan, "service_scan", fake_service_scan)
+
+    class _DevicesScreen(FakeStdscr):
+        """Fake screen: DOWN to Devices, then 'q' quit."""
+
+        def __init__(self):
+            super().__init__()
+            self._keys = iter([curses.KEY_DOWN, ord("q")])
+
+        def keypad(self, value):
+            pass
+
+        def timeout(self, value):
+            pass
+
+        def getch(self):
+            return next(self._keys)
+
+        def move(self, y, x):
+            pass
+
+        def clrtoeol(self):
+            pass
+
+        def addstr(self, y, x, text, attr=0):
+            self.writes.append((y, x, text, attr))
+
+    app_module.run(_DevicesScreen())
+
+    # Every discovered host must receive an automatic service scan.
+    assert len(service_scan_targets) == 3
+    assert "192.168.1.10" in service_scan_targets
+    assert "192.168.1.11" in service_scan_targets
+    assert "192.168.1.12" in service_scan_targets

@@ -10,4 +10,4 @@ from importlib.metadata import version as _metadata_version, PackageNotFoundErro
 try:
     __version__ = _metadata_version("netwatch-ng")
 except PackageNotFoundError:
-    __version__ = "2.0.0.dev1"
+    __version__ = "2.1.1"

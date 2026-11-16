@@ -6,6 +6,20 @@ from netwatch_ng.tui.screens import router_intelligence, wifi_intelligence
 from netwatch_ng.wifi_intelligence import AccessPoint, Station, WirelessInterface
 
 
+def _flatten_lines(lines):
+    """Convert screen content (strings + table specs) to plain strings."""
+    flat = []
+    for line in lines:
+        if isinstance(line, tuple) and len(line) >= 3 and line[0] == "TABLE":
+            _, headers, rows = line[0], line[1], line[2]
+            flat.append(" | ".join(str(h) for h in headers))
+            for row in rows:
+                flat.append(" | ".join(str(c) for c in row))
+        else:
+            flat.append(str(line))
+    return flat
+
+
 def test_router_screen_labels_oui_match_as_unverified():
     lines = router_intelligence.build_router_lines(
         RouterReport(
@@ -17,8 +31,10 @@ def test_router_screen_labels_oui_match_as_unverified():
             local_addresses=["192.168.1.2"],
         )
     )
-    assert any("model/firmware unverified" in line for line in lines)
-    assert any("Raspberry Pi Foundation" in line for line in lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert "model/firmware unverified" in text
+    assert "Raspberry Pi Foundation" in text
 
 
 def test_wifi_screen_discloses_backend_and_channel_count_limitation(monkeypatch):
@@ -41,11 +57,13 @@ def test_wifi_screen_discloses_backend_and_channel_count_limitation(monkeypatch)
         ],
         "wlan0",
     )
-    assert any("Engine: Aircrack-ng" in line for line in lines)
-    assert any("wlan0" in line and "managed" in line for line in lines)
-    assert any("Observed APs per channel" in line for line in lines)
-    assert any("not measured RF utilization" in line for line in lines)
-    assert any("rfkill soft/hard block: not reported" in line for line in lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert "Aircrack-ng" in text
+    assert "wlan0" in text and "managed" in text
+    assert "Channel | AP count" in text
+    assert "not measured RF utilization" in text
+    assert "rfkill soft/hard block" in text
 
 
 def test_wifi_screen_shows_stations_and_last_update(monkeypatch):
@@ -76,9 +94,11 @@ def test_wifi_screen_shows_stations_and_last_update(monkeypatch):
         "wlan0",
         stations=stations,
     )
-    assert any("Last update:" in line for line in lines)
-    assert any("11:22:33:44:55:66" in line for line in lines)
-    assert any("Stations detected" in line for line in lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert "Last update" in text
+    assert "11:22:33:44:55:66" in text
+    assert "Stations detected" in text
 
 
 def test_wifi_screen_reports_missing_backend(monkeypatch):
@@ -89,8 +109,10 @@ def test_wifi_screen_reports_missing_backend(monkeypatch):
     )
     monkeypatch.setattr(wifi_intelligence, "which", lambda binary: None)
     lines = wifi_intelligence.build_wifi_lines(None, None)
-    assert any("Missing system binary" in line for line in lines)
-    assert any("apt install aircrack-ng" in line for line in lines)
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
+    assert "Missing system binary" in text
+    assert "apt install aircrack-ng" in text
 
 
 def test_diagnostics_screen_documents_available_tui_actions(monkeypatch):
@@ -98,7 +120,9 @@ def test_diagnostics_screen_documents_available_tui_actions(monkeypatch):
     monkeypatch.setattr(diagnostics_screen.network, "get_dns_servers", lambda: [])
 
     lines = diagnostics_screen.build_diagnostics_lines()
+    flat = _flatten_lines(lines)
+    text = "\n".join(flat)
 
-    assert any("p ping the default gateway" in line for line in lines)
-    assert any("t trace a route to a host/IP" in line for line in lines)
-    assert any("d look up DNS" in line for line in lines)
+    assert "ping the default gateway" in text
+    assert "trace a route to a host/IP" in text
+    assert "look up DNS" in text

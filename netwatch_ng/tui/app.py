@@ -16,6 +16,7 @@ from threading import Event
 from netwatch_ng import __version__
 from netwatch_ng import activity_log, diagnostics, firewall, reset_manager, router_intelligence, settings, traffic, upnp, wifi_intelligence
 from netwatch_ng.discovery import device_intelligence, devices as devices_mod, export as device_export, nmap_scan
+from netwatch_ng.core import network
 from netwatch_ng.system.config import get_config_dir, is_root
 from netwatch_ng.tui import components, theme
 from netwatch_ng.tui.splash import show_splash
@@ -277,7 +278,7 @@ def _screen_lines(
     traffic_message: str | None = None,
     device_result=None,
     device_message: str | None = None,
-) -> list[str]:
+) -> list:
     if label == "Dashboard":
         return build_dashboard_lines()
     if label == "Devices":
@@ -366,8 +367,13 @@ def _draw_footer(stdscr, height, width, label: str, enabled: bool) -> None:
     addstr(stdscr, height - 1, 0, footer[: max(width - 1, 0)], theme.attr(theme.MUTED, enabled))
 
 
-def _paint_content(stdscr, height, width, lines: list[str], enabled: bool) -> None:
-    """Paint screen content inside a bordered content panel."""
+def _paint_content(stdscr, height, width, lines, enabled: bool) -> None:
+    """Paint screen content inside a bordered content panel.
+
+    ``lines`` may contain plain strings or table specs:
+    ``("TABLE", headers, rows[, col_widths])`` which are rendered with
+    :func:`components.paint_table`.
+    """
     panel_x = MENU_WIDTH + 1
     panel_y = 2
     panel_w = max(width - panel_x - 1, 10)
@@ -375,13 +381,30 @@ def _paint_content(stdscr, height, width, lines: list[str], enabled: bool) -> No
     content_y, content_x, content_h, content_w = components.draw_panel(
         stdscr, panel_y, panel_x, panel_h, panel_w, title=None, enabled=enabled
     )
-    for i, line in enumerate(lines):
-        y = content_y + i
-        if y >= content_y + content_h:
+    y = content_y
+    max_y = content_y + content_h
+    for item in lines:
+        if y >= max_y:
             break
-        components.paint_line(
-            stdscr, y, content_x, content_x + content_w, line, enabled, title=(i == 0)
-        )
+        if (
+            isinstance(item, tuple)
+            and len(item) >= 3
+            and item[0] == "TABLE"
+        ):
+            _, headers, rows = item[0], item[1], item[2]
+            col_widths = item[3] if len(item) > 3 else None
+            rows_consumed = components.paint_table(
+                stdscr, y, content_x, content_x + content_w,
+                headers, rows, enabled, col_widths,
+            )
+            y += rows_consumed
+        else:
+            line = item if isinstance(item, str) else str(item)
+            components.paint_line(
+                stdscr, y, content_x, content_x + content_w, line, enabled,
+                title=(y == content_y),
+            )
+            y += 1
 
 
 def run(stdscr) -> None:
@@ -389,13 +412,14 @@ def run(stdscr) -> None:
     stdscr.keypad(True)
     stdscr.timeout(200)
     selected = 0
-    executor = ThreadPoolExecutor(max_workers=2)
+    executor = ThreadPoolExecutor(max_workers=8)
     router_probe: Future | None = None
     wifi_scan: Future | None = None
     upnp_scan: Future | None = None
     diagnostic_task: Future | None = None
     device_scan: Future | None = None
     service_scan: Future | None = None
+    auto_service_futures: dict[str, Future] = {}
     device_result = None
     device_message = None
     router_result = None
@@ -410,6 +434,7 @@ def run(stdscr) -> None:
     traffic_message = None
     wifi_cancel = Event()
     device_cancel = Event()
+    device_auto_scanned = False
     wifi_monitor_interface: str | None = None
     previous_selected = None
     lines: list[str] = []
@@ -418,10 +443,12 @@ def run(stdscr) -> None:
             current_settings = settings.load_settings()
             refresh_seconds = current_settings["refresh_seconds"]
             color_mode = current_settings["color_mode"]
+            scan_timeout = current_settings["scan_timeout_seconds"]
             colors_enabled = _configure_colors(color_mode)
         except Exception as exc:
             refresh_seconds = 0
             color_mode = "auto"
+            scan_timeout = 60.0
             colors_enabled = _configure_colors("auto")
             settings_message = f"Settings unavailable; automatic refresh disabled: {exc}"
 
@@ -461,6 +488,36 @@ def run(stdscr) -> None:
 
             label, status = MENU[selected]
             if selected != previous_selected:
+                # Auto-start an active Nmap discovery on first entry to the
+                # Devices screen. Passive neighbor-table results (often just
+                # the gateway on a Wi-Fi client) are shown immediately; the
+                # active scan populates the full device list when it completes.
+                if (
+                    label == "Devices"
+                    and device_scan is None
+                    and device_result is None
+                    and not device_auto_scanned
+                ):
+                    device_auto_scanned = True
+                    try:
+                        subnet = network.get_local_subnet("inet")
+                        if subnet:
+                            device_message = (
+                                f"Active Nmap discovery running for {subnet}..."
+                            )
+                            device_scan = executor.submit(
+                                devices_mod.active_scan,
+                                subnet,
+                                timeout=scan_timeout,
+                                cancel_event=device_cancel,
+                            )
+                        else:
+                            device_message = (
+                                "No local subnet detected; passive neighbor scan only."
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        device_message = f"Active discovery unavailable: {exc}"
+                        device_auto_scanned = False
                 try:
                     lines = _screen_lines(
                         label, status, router_result, router_message,
@@ -570,6 +627,21 @@ def run(stdscr) -> None:
                 try:
                     device_result = device_scan.result()
                     device_message = f"Active Nmap discovery completed: {len(device_result)} device(s)."
+                    # Launch automatic service/version scans for every discovered host,
+                    # all in parallel so a slow or unresponsive host does not block the others.
+                    targets = [
+                        d.ip for d in device_result
+                        if d.ip and d.ip != "0.0.0.0"
+                    ]
+                    for target in targets:
+                        if target not in auto_service_futures:
+                            device_message += f" — service scan on {target}..."
+                            auto_service_futures[target] = executor.submit(
+                                nmap_scan.service_scan,
+                                target,
+                                timeout=scan_timeout,
+                                cancel_event=device_cancel,
+                            )
                 except Exception as exc:
                     device_message = f"Active Nmap discovery failed: {exc}"
                     device_message += _log_warning("Devices", "active_scan", "error", str(exc))
@@ -583,6 +655,47 @@ def run(stdscr) -> None:
                         diagnostic_result, diagnostic_message, settings_message,
                         firewall_message, traffic_message, device_result, device_message,
                     )
+
+            # Process automatic service scans as they complete (all run in parallel).
+            done_targets: list[str] = []
+            for target, future in auto_service_futures.items():
+                if future.done():
+                    done_targets.append(target)
+            for target in done_targets:
+                future = auto_service_futures.pop(target)
+                try:
+                    scanned_host = future.result()
+                    if scanned_host is not None:
+                        base_devices = (
+                            device_result if device_result is not None
+                            else devices_mod.passive_scan("inet")
+                        )
+                        device_result = device_intelligence.merge(
+                            base_devices + [device_intelligence.from_nmap_host(scanned_host)]
+                        )
+                        device_message = (
+                            f"Service scan completed: {scanned_host.ip}"
+                        )
+                    else:
+                        device_message = f"Service scan returned no result for {target}."
+                except Exception as exc:
+                    device_message = f"Service scan failed for {target}: {exc}"
+                    device_message += _log_warning(
+                        "Devices", "auto_service_scan", "error", str(exc)
+                    )
+                else:
+                    device_message += _log_warning(
+                        "Devices", "auto_service_scan", "success", device_message
+                    )
+                if label == "Devices":
+                    lines = _screen_lines(
+                        label, status, router_result, router_message,
+                        wifi_result, wifi_message, reset_message,
+                        diagnostic_result, diagnostic_message, settings_message,
+                        firewall_message, traffic_message, device_result, device_message,
+                    )
+            if not auto_service_futures and device_message and "all hosts scanned" not in device_message:
+                device_message += " — all hosts scanned."
 
             if diagnostic_task is not None and diagnostic_task.done():
                 try:
@@ -653,7 +766,45 @@ def run(stdscr) -> None:
                 firewall_message = None
                 traffic_message = None
             elif key in (ord("r"), ord("R")):
-                previous_selected = None
+                # Refresh: re-run the active discovery task for the current
+                # screen. When a scan is already in flight it is cancelled so
+                # a fresh one starts immediately on the next loop iteration.
+                if label == "Devices":
+                    device_cancel.set()
+                    device_scan = None
+                    auto_service_futures = {}
+                    device_result = None
+                    device_message = None
+                    device_auto_scanned = False
+                    previous_selected = None
+                    # The active scan (neighbor table + Nmap) is launched
+                    # on the next loop iteration via the
+                    # "selected != previous_selected" block above.
+                elif label == "Wi-Fi Intelligence":
+                    wifi_cancel.set()
+                    wifi_scan = None
+                    wifi_result = None
+                    wifi_message = "Wi-Fi survey running..."
+                    previous_selected = None
+                    wifi_scan = executor.submit(_scan_wifi, wifi_cancel)
+                elif label == "Router Intelligence":
+                    router_result = None
+                    router_message = (
+                        "Checking common TCP management ports on the gateway..."
+                    )
+                    previous_selected = None
+                    router_probe = executor.submit(
+                        router_intelligence.inspect_and_probe_gateway
+                    )
+                elif label == "Network Diagnostics":
+                    diagnostic_result = None
+                    diagnostic_message = (
+                        "Pinging the configured default gateway..."
+                    )
+                    previous_selected = None
+                    diagnostic_task = executor.submit(diagnostics.ping_gateway)
+                else:
+                    previous_selected = None
             elif key in (ord("x"), ord("X")) and label == "Reset Manager":
                 prompt = "Remove the listed NETWATCH rules? Press y to confirm; any other key cancels."
                 if _confirm(stdscr, prompt):

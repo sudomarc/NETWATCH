@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netwatch-ng"
-version = "2.0.0.dev1"
+version = "2.1.1"
 description = "Linux TUI for network supervision, identification and administration"
 readme = "README.md"
 license = { text = "MIT" }

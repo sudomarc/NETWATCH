@@ -78,7 +78,7 @@ NETWATCH NG is published as a signed Debian package on the official APT
 repository at `https://sudomarc.github.io/NETWATCH/`.
 
 The repository serves the `stable` suite, `main` component, for `amd64`, and
-provides the `netwatch-ng` package (version 2.0.0-1). It is signed with
+provides the `netwatch-ng` package (version 2.1.1). It is signed with
 `InRelease` and `Release.gpg`, verifiable with the public key.
 
 Add the repository and install:

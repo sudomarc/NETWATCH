@@ -38,25 +38,41 @@ def _count_traffic_policers() -> int | None:
         return None
 
 
-def build_dashboard_lines() -> list[str]:
-    lines: list[str] = []
+def build_dashboard_lines() -> list:
+    """Return screen content lines, including table specs.
+
+    A table spec is a tuple: ``("TABLE", headers, rows[, col_widths])``.
+    """
+    lines: list = []
 
     # --- Connection ---
-    lines.append("CONNECTION")
     try:
         gw4 = net_mod.get_default_gateway("inet")
         gw6 = net_mod.get_default_gateway("inet6")
     except BinaryNotFound:
         gw4 = gw6 = None
-        lines.append("  Default gateway: [ERROR] 'ip' (iproute2) not installed — interface state unavailable")
+        lines.append("CONNECTION")
+        lines.append("")
+        lines.append("  [ERROR] 'ip' (iproute2) not installed — interface state unavailable")
     except Exception as exc:  # pragma: no cover - defensive
         gw4 = gw6 = None
-        lines.append(f"  Default gateway: [ERROR] {exc}")
+        lines.append("CONNECTION")
+        lines.append("")
+        lines.append(f"  [ERROR] gateway inspection failed: {exc}")
     else:
         gateway = gw4 or gw6
         if gateway:
-            lines.append(f"  Default gateway: [READY] {gateway.gateway} via {gateway.device or '-'}")
+            lines.append("CONNECTION")
+            lines.append("")
+            lines.append(
+                ("TABLE", ["Field", "Value"], [
+                    ["Default gateway", f"{gateway.gateway} via {gateway.device or '-'}"],
+                    ["Status", "[READY]"],
+                ])
+            )
         else:
+            lines.append("CONNECTION")
+            lines.append("")
             lines.append("  Default gateway: [DEGRADED] none configured")
 
     # --- Interfaces ---
@@ -72,23 +88,31 @@ def build_dashboard_lines() -> list[str]:
         ifaces = []
     up = sum(1 for i in ifaces if i.is_up)
     if ifaces:
+        iface_rows = []
+        for i in ifaces[:MAX_INTERFACES]:
+            state = "[UP]" if i.is_up else "[DOWN]"
+            v4 = ", ".join(a.address for a in i.ipv4_addresses) or "-"
+            v6 = ", ".join(a.address for a in i.ipv6_addresses) or "-"
+            iface_rows.append([state, i.name, v4, v6, i.mac or "-"])
+        lines.append(
+            ("TABLE", ["State", "Interface", "IPv4", "IPv6", "MAC"], iface_rows)
+        )
+        if len(ifaces) > MAX_INTERFACES:
+            lines.append(f"  ... and {len(ifaces) - MAX_INTERFACES} more interface(s)")
         lines.append(f"  {len(ifaces)} interface(s) detected  [ACTIVE] {up} up")
     else:
         lines.append("  [DEGRADED] no interfaces detected")
-    for i in ifaces[:MAX_INTERFACES]:
-        state = "[UP]" if i.is_up else "[DOWN]"
-        v4 = ", ".join(a.address for a in i.ipv4_addresses) or "-"
-        v6 = ", ".join(a.address for a in i.ipv6_addresses) or "-"
-        lines.append(f"  {state} {i.name:<10} ipv4={v4:<15} ipv6={v6} mac={i.mac or '-'}")
-    if len(ifaces) > MAX_INTERFACES:
-        lines.append(f"  ... and {len(ifaces) - MAX_INTERFACES} more interface(s)")
 
     # --- Devices ---
     lines.append("")
     lines.append("DEVICES")
     try:
         found = devices_mod.passive_scan("inet")
-        lines.append(f"  Devices detected: [READY] {len(found)} on the local subnet")
+        lines.append(
+            ("TABLE", ["Item", "Value"], [
+                ["Devices detected", f"[READY] {len(found)} on the local subnet"],
+            ])
+        )
     except Exception as exc:
         lines.append(f"  Devices detected: [ERROR] {exc}")
 
@@ -96,15 +120,17 @@ def build_dashboard_lines() -> list[str]:
     lines.append("")
     lines.append("NETWATCH CONTROL")
     fw_count = _count_firewall_rules()
-    if fw_count is not None:
-        lines.append(f"  Active firewall rules: [ACTIVE] {fw_count}")
-    else:
-        lines.append("  Active firewall rules: [DEGRADED] engine unavailable")
     policer_count = _count_traffic_policers()
-    if policer_count is not None:
-        lines.append(f"  Active traffic policers: [ACTIVE] {policer_count}")
+    ctrl_rows = []
+    if fw_count is not None:
+        ctrl_rows.append(["Firewall rules", f"[ACTIVE] {fw_count}"])
     else:
-        lines.append("  Active traffic policers: [DEGRADED] engine unavailable")
+        ctrl_rows.append(["Firewall rules", "[DEGRADED] engine unavailable"])
+    if policer_count is not None:
+        ctrl_rows.append(["Traffic policers", f"[ACTIVE] {policer_count}"])
+    else:
+        ctrl_rows.append(["Traffic policers", "[DEGRADED] engine unavailable"])
+    lines.append(("TABLE", ["Type", "Count / Status"], ctrl_rows))
 
     # --- Recent activity ---
     lines.append("")
@@ -114,12 +140,14 @@ def build_dashboard_lines() -> list[str]:
     except Exception:
         events = []
     if events:
+        activity_rows = []
         for event in events:
             timestamp = str(event.get("timestamp", ""))[-14:]
             module = str(event.get("module", "?"))[:10]
             action = str(event.get("action", "?"))[:22]
             status = str(event.get("status", "?"))
-            lines.append(f"  {timestamp}  [{status.upper():<7}] {module:<10} {action}")
+            activity_rows.append([timestamp, f"[{status.upper():<7}]", module, action])
+        lines.append(("TABLE", ["Time", "Status", "Module", "Action"], activity_rows))
     else:
         lines.append("  [INFO] no activity recorded yet")
 
@@ -129,8 +157,16 @@ def build_dashboard_lines() -> list[str]:
     missing = deps.missing_mandatory()
     if missing:
         names = ", ".join(d.binary for d in missing)
-        lines.append(f"  Missing mandatory tools: [WARNING] {names} — see System Manager")
+        lines.append(
+            ("TABLE", ["Item", "Status"], [
+                ["Mandatory tools", f"[WARNING] {names} — see System Manager"],
+            ])
+        )
     else:
-        lines.append("  Mandatory tools: [READY] all present")
+        lines.append(
+            ("TABLE", ["Item", "Status"], [
+                ["Mandatory tools", "[READY] all present"],
+            ])
+        )
 
     return lines

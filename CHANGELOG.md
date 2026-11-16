@@ -1,5 +1,49 @@
 # Changelog
 
+## 2.1.1 — "Signal Verte"
+
+Automatic device & service discovery across the whole Wi-Fi subnet, plus a
+fully tabular TUI.
+
+### Why this release
+
+NETWATCH NG only showed the default gateway on Wi-Fi clients because it
+relied on the kernel's ARP neighbor table, which a client machine only
+populates for hosts it has already talked to. Every other phone, laptop or
+IoT device on the same Wi-Fi was invisible.
+
+### Features
+
+- **Automatic active discovery on entering Devices**: the local subnet is
+  detected from the default route (`ip route` + `ip addr`), then an Nmap ping
+  scan (`-sn`) runs automatically over the whole CIDR. Results appear as soon
+  as they are collected — no manual target entry required.
+- **Automatic parallel service identification**: every discovered host gets an
+  automatic `nmap -sV` service/version scan. All scans run in parallel
+  (`ThreadPoolExecutor(max_workers=8)`), so a slow or unresponsive host never
+  blocks the others. Open ports and services appear directly in the device
+  table.
+- **Refresh re-runs the full scan**: pressing `r` on Devices (or any other
+  screen) cancels any in-flight scan and launches a fresh discovery + service
+  identification pass.
+
+### Visuals
+
+- **Every screen is now a table**: Dashboard, Devices, Router Intelligence,
+  Wi-Fi Intelligence, Firewall, Traffic Manager, Reset Manager, Network
+  Diagnostics, System Manager, Settings and Logs all render as column-aligned
+  tables with headers, separators and borders (UTF-8 or ASCII depending on the
+  terminal).
+
+### Bug fixes
+
+- fixed `netwatch.sh scan json` double-quote escaping (hostnames/vendors with
+  `"` produced unparseable JSON);
+- fixed Wi-Fi survey forcing the default-route interface into monitor mode;
+- fixed `_read_latest_airodump_csv()` selecting the wrong capture by name
+  (now uses modification time);
+- removed unused imports and placeholder-less f-strings.
+
 ## Unreleased
 
 ### Bug fixes
