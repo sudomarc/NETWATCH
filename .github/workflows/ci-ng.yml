@@ -10,6 +10,8 @@ on:
       - "tests_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/ci-ng.yml"
+      - ".github/workflows/publish-apt.yml"
+      - ".github/workflows/validate-apt-signing.yml"
 
 permissions:
   contents: read
