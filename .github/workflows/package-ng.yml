@@ -9,6 +9,9 @@ on:
       - "debian/**"
       - "docs/netwatch-ng.1"
       - ".github/workflows/package-ng.yml"
+      - ".github/workflows/publish-apt.yml"
+      - ".github/workflows/validate-apt-signing.yml"
+      - "docs/apt-repository.md"
   push:
     branches: ["main", "fix/**"]
     paths:
