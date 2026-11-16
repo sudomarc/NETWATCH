@@ -293,7 +293,22 @@ jobs:
                   f"Expected exactly one source version fallback in {init_path}, found {init_count}"
               )
           init_path.write_text(init_updated, encoding="utf-8")
-          print(f"Set project version and source fallback to {version}")
+
+          # Older stable tags may still contain a development-version literal
+          # in the header test. Adapt that assertion to the runtime version.
+          test_path = Path("tests_ng/test_app_shell.py")
+          test_source = test_path.read_text(encoding="utf-8")
+          legacy_assertion = '    assert any("v2.0.0.dev1" in text for text in row0)'
+          dynamic_assertion = '    assert any(f"v{app_module.__version__}" in text for text in row0)'
+          if legacy_assertion in test_source:
+              test_source = test_source.replace(legacy_assertion, dynamic_assertion)
+              test_path.write_text(test_source, encoding="utf-8")
+          elif dynamic_assertion not in test_source:
+              raise SystemExit(
+                  f"Could not find a supported version assertion in {test_path}"
+              )
+
+          print(f"Set project, source fallback, and TUI test versions to {version}")
           PY
 
           echo "NETWATCH_VERSION=$VERSION" >> "$GITHUB_ENV"
