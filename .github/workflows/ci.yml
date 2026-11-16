@@ -187,7 +187,116 @@ jobs:
           path = Path("pyproject.toml")
           source = path.read_text(encoding="utf-8")
           updated, count = re.subn(
-              r'(?m)^version = "[^"]+"$',
+              r'(?m)^version = "[^"]+"
+          PY
+
+          echo "NETWATCH_VERSION=$VERSION" >> "$GITHUB_ENV"
+          dch --newversion "$VERSION-1" --distribution stable \
+            --force-distribution "NETWATCH NG $VERSION release."
+
+          python3 -m py_compile $(find netwatch_ng -name "*.py")
+          python3 -m pytest tests_ng -q
+          python3 -m pytest tests_e2e -q
+
+      - name: Build and verify Debian package version
+        run: |
+          set -euo pipefail
+          dpkg-buildpackage -us -uc -b
+          mkdir -p public/pool/main
+          PACKAGE="$(find .. -maxdepth 1 -type f -name 'netwatch-ng_*.deb' -print -quit)"
+          test -n "$PACKAGE"
+          cp "$PACKAGE" public/pool/main/
+          dpkg-deb --info "public/pool/main/$(basename "$PACKAGE")"
+
+          ACTUAL_DEB_VERSION="$(dpkg-deb -f "$PACKAGE" Version)"
+          EXPECTED_DEB_VERSION="$NETWATCH_VERSION-1"
+          test "$ACTUAL_DEB_VERSION" = "$EXPECTED_DEB_VERSION" || {
+            echo "Debian package version mismatch: expected $EXPECTED_DEB_VERSION, got $ACTUAL_DEB_VERSION"
+            exit 1
+          }
+
+          EXTRACT_DIR="$(mktemp -d)"
+          trap 'rm -rf "$EXTRACT_DIR"' EXIT
+          dpkg-deb -x "$PACKAGE" "$EXTRACT_DIR"
+          METADATA="$(find "$EXTRACT_DIR" -type f -path '*/netwatch_ng-*.dist-info/METADATA' -print -quit)"
+          test -n "$METADATA"
+          grep -Fx "Version: $NETWATCH_VERSION" "$METADATA"
+
+      - name: Generate APT indexes and verify archive signatures
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          test -n "$APT_GPG_PRIVATE_KEY" || { echo "Missing APT_GPG_PRIVATE_KEY secret"; exit 1; }
+          test -n "$APT_GPG_KEY_ID" || { echo "Missing APT_GPG_KEY_ID secret"; exit 1; }
+          test -n "$APT_GPG_PASSPHRASE" || { echo "Missing APT_GPG_PASSPHRASE secret"; exit 1; }
+          [[ "$APT_GPG_KEY_ID" =~ ^[A-Fa-f0-9]{40}$ ]] || {
+            echo "APT_GPG_KEY_ID must be the full 40-character primary-key fingerprint"
+            exit 1
+          }
+
+          SIGN_HOME="$(mktemp -d)"
+          VERIFY_HOME="$(mktemp -d)"
+          chmod 700 "$SIGN_HOME" "$VERIFY_HOME"
+          export GNUPGHOME="$SIGN_HOME"
+          cleanup() {
+            GNUPGHOME="$SIGN_HOME" gpgconf --kill all >/dev/null 2>&1 || true
+            rm -rf -- "$SIGN_HOME" "$VERIFY_HOME"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          ACTUAL_FINGERPRINT="$(gpg --batch --with-colons --list-secret-keys "$APT_GPG_KEY_ID" \
+            | awk -F: '$1 == "fpr" { print toupper($10); exit }')"
+          EXPECTED_FINGERPRINT="$(printf '%s' "$APT_GPG_KEY_ID" | tr '[:lower:]' '[:upper:]')"
+          test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT" || {
+            echo "Imported private key does not match APT_GPG_KEY_ID"
+            exit 1
+          }
+
+          mkdir -p public/dists/stable/main/binary-amd64
+          cd public
+          apt-ftparchive packages pool/main > dists/stable/main/binary-amd64/Packages
+          gzip -n -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+          cat > apt-release.conf <<'EOF'
+          APT::FTPArchive::Release::Origin "NETWATCH NG";
+          APT::FTPArchive::Release::Label "NETWATCH NG";
+          APT::FTPArchive::Release::Suite "stable";
+          APT::FTPArchive::Release::Codename "stable";
+          APT::FTPArchive::Release::Architectures "amd64";
+          APT::FTPArchive::Release::Components "main";
+          APT::FTPArchive::Release::Description "NETWATCH NG signed Debian repository";
+          EOF
+          apt-ftparchive -c=apt-release.conf release dists/stable > dists/stable/Release
+
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --clearsign --output dists/stable/InRelease dists/stable/Release
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --detach-sign --output dists/stable/Release.gpg dists/stable/Release
+          gpg --armor --export "$APT_GPG_KEY_ID" > public.key
+          test -s public.key
+
+          # Verify with a separate keyring containing only the exported public key.
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --import public.key
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify dists/stable/Release.gpg dists/stable/Release
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify dists/stable/InRelease
+          touch .nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy APT repository to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+,
               f'version = "{version}"',
               source,
           )
@@ -196,7 +305,131 @@ jobs:
                   f"Expected exactly one project version in {path}, found {count}"
               )
           path.write_text(updated, encoding="utf-8")
-          print(f"Set Python package version to {version}")
+
+          # Keep the source-checkout fallback aligned as well. During release
+          # tests the package is imported directly from this temporary checkout.
+          init_path = Path("netwatch_ng/__init__.py")
+          init_source = init_path.read_text(encoding="utf-8")
+          init_updated, init_count = re.subn(
+              r'(?m)^    __version__ = "[^"]+"
+          PY
+
+          echo "NETWATCH_VERSION=$VERSION" >> "$GITHUB_ENV"
+          dch --newversion "$VERSION-1" --distribution stable \
+            --force-distribution "NETWATCH NG $VERSION release."
+
+          python3 -m py_compile $(find netwatch_ng -name "*.py")
+          python3 -m pytest tests_ng -q
+          python3 -m pytest tests_e2e -q
+
+      - name: Build and verify Debian package version
+        run: |
+          set -euo pipefail
+          dpkg-buildpackage -us -uc -b
+          mkdir -p public/pool/main
+          PACKAGE="$(find .. -maxdepth 1 -type f -name 'netwatch-ng_*.deb' -print -quit)"
+          test -n "$PACKAGE"
+          cp "$PACKAGE" public/pool/main/
+          dpkg-deb --info "public/pool/main/$(basename "$PACKAGE")"
+
+          ACTUAL_DEB_VERSION="$(dpkg-deb -f "$PACKAGE" Version)"
+          EXPECTED_DEB_VERSION="$NETWATCH_VERSION-1"
+          test "$ACTUAL_DEB_VERSION" = "$EXPECTED_DEB_VERSION" || {
+            echo "Debian package version mismatch: expected $EXPECTED_DEB_VERSION, got $ACTUAL_DEB_VERSION"
+            exit 1
+          }
+
+          EXTRACT_DIR="$(mktemp -d)"
+          trap 'rm -rf "$EXTRACT_DIR"' EXIT
+          dpkg-deb -x "$PACKAGE" "$EXTRACT_DIR"
+          METADATA="$(find "$EXTRACT_DIR" -type f -path '*/netwatch_ng-*.dist-info/METADATA' -print -quit)"
+          test -n "$METADATA"
+          grep -Fx "Version: $NETWATCH_VERSION" "$METADATA"
+
+      - name: Generate APT indexes and verify archive signatures
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          test -n "$APT_GPG_PRIVATE_KEY" || { echo "Missing APT_GPG_PRIVATE_KEY secret"; exit 1; }
+          test -n "$APT_GPG_KEY_ID" || { echo "Missing APT_GPG_KEY_ID secret"; exit 1; }
+          test -n "$APT_GPG_PASSPHRASE" || { echo "Missing APT_GPG_PASSPHRASE secret"; exit 1; }
+          [[ "$APT_GPG_KEY_ID" =~ ^[A-Fa-f0-9]{40}$ ]] || {
+            echo "APT_GPG_KEY_ID must be the full 40-character primary-key fingerprint"
+            exit 1
+          }
+
+          SIGN_HOME="$(mktemp -d)"
+          VERIFY_HOME="$(mktemp -d)"
+          chmod 700 "$SIGN_HOME" "$VERIFY_HOME"
+          export GNUPGHOME="$SIGN_HOME"
+          cleanup() {
+            GNUPGHOME="$SIGN_HOME" gpgconf --kill all >/dev/null 2>&1 || true
+            rm -rf -- "$SIGN_HOME" "$VERIFY_HOME"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          ACTUAL_FINGERPRINT="$(gpg --batch --with-colons --list-secret-keys "$APT_GPG_KEY_ID" \
+            | awk -F: '$1 == "fpr" { print toupper($10); exit }')"
+          EXPECTED_FINGERPRINT="$(printf '%s' "$APT_GPG_KEY_ID" | tr '[:lower:]' '[:upper:]')"
+          test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT" || {
+            echo "Imported private key does not match APT_GPG_KEY_ID"
+            exit 1
+          }
+
+          mkdir -p public/dists/stable/main/binary-amd64
+          cd public
+          apt-ftparchive packages pool/main > dists/stable/main/binary-amd64/Packages
+          gzip -n -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+          cat > apt-release.conf <<'EOF'
+          APT::FTPArchive::Release::Origin "NETWATCH NG";
+          APT::FTPArchive::Release::Label "NETWATCH NG";
+          APT::FTPArchive::Release::Suite "stable";
+          APT::FTPArchive::Release::Codename "stable";
+          APT::FTPArchive::Release::Architectures "amd64";
+          APT::FTPArchive::Release::Components "main";
+          APT::FTPArchive::Release::Description "NETWATCH NG signed Debian repository";
+          EOF
+          apt-ftparchive -c=apt-release.conf release dists/stable > dists/stable/Release
+
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --clearsign --output dists/stable/InRelease dists/stable/Release
+          printf '%s\n' "$APT_GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --local-user "$APT_GPG_KEY_ID" \
+            --detach-sign --output dists/stable/Release.gpg dists/stable/Release
+          gpg --armor --export "$APT_GPG_KEY_ID" > public.key
+          test -s public.key
+
+          # Verify with a separate keyring containing only the exported public key.
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --import public.key
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify dists/stable/Release.gpg dists/stable/Release
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --verify dists/stable/InRelease
+          touch .nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy APT repository to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+,
+              f'    __version__ = "{version}"',
+              init_source,
+          )
+          if init_count != 1:
+              raise SystemExit(
+                  f"Expected exactly one source version fallback in {init_path}, found {init_count}"
+              )
+          init_path.write_text(init_updated, encoding="utf-8")
+          print(f"Set Python project and source fallback versions to {version}")
           PY
 
           echo "NETWATCH_VERSION=$VERSION" >> "$GITHUB_ENV"
