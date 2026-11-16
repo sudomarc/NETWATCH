@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Bug fixes
+
+- fixed invalid JSON output from `netwatch.sh scan json`: the double-quote
+  escaper used a pattern that stripped the quotes instead of escaping them, so
+  any hostname or vendor containing `"` produced unparseable JSON. `csv` was
+  unaffected;
+- fixed `tests/test_output.sh` so a JSON/CSV parse failure actually fails the
+  test instead of printing a traceback and exiting 0;
+- fixed the Wi-Fi survey dropping the active connection: `scan_networks()` now
+  refuses to force the interface that carries the default route into monitor
+  mode, `scan_available_networks()` prefers an interface already in monitor
+  mode, and the TUI restores any monitor interface it created when it exits;
+- fixed `_read_latest_airodump_csv()` selecting the wrong capture file by name
+  (it now uses modification time, so `scan-10.csv` is no longer treated as
+  older than `scan-2.csv`).
+
+### Housekeeping
+
+- removed unused imports and placeholder-less f-strings flagged by the linters.
+
 ## 1.3.1
 
 Stabilization release under active development.

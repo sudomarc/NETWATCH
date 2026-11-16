@@ -11,7 +11,6 @@ import curses
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Event
 
 from netwatch_ng import __version__
@@ -224,6 +223,22 @@ def _scan_wifi(cancel_event: Event):
     return wifi_intelligence.scan_available_networks(
         timeout=timeout, cancel_event=cancel_event
     )
+
+
+def _restore_monitor_interface(interface: str | None) -> None:
+    """Best-effort restore of a monitor interface NETWATCH created.
+
+    Called when the TUI exits. Leaving an interface in monitor mode would
+    keep the machine's Wi-Fi broken after NETWATCH quits, so the restore is
+    attempted unconditionally and any failure is ignored: the operator is
+    already leaving, and there is nothing actionable to show at that point.
+    """
+    if not interface:
+        return
+    try:
+        wifi_intelligence.stop_monitor_mode(interface)
+    except Exception:
+        pass
 
 
 def _log_warning(module: str, action: str, status: str, detail: str) -> str:
@@ -926,6 +941,7 @@ def run(stdscr) -> None:
     finally:
         wifi_cancel.set()
         executor.shutdown(wait=False, cancel_futures=True)
+        _restore_monitor_interface(wifi_monitor_interface)
 
 
 def main() -> None:

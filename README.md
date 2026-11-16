@@ -26,6 +26,10 @@ Current NG capabilities:
   the Aircrack-ng suite (`airmon-ng` for interfaces and monitor mode,
   `airodump-ng` for the survey). Monitor mode is an explicit operator action
   requiring root privileges; it can interrupt the active Wi-Fi connection.
+  The survey refuses to force the adapter that carries the default route into
+  monitor mode, so a survey never silently drops the machine's connectivity;
+  an interface already in monitor mode is used when available. When the TUI
+  itself put an adapter into monitor mode it restores it on exit.
   `airmon-ng check kill` is never run automatically. Key cracking, frame
   injection and station deauthentication are not implemented.
 - IPv4/IPv6 single-IP block/unblock through NETWATCH-owned iptables rules on

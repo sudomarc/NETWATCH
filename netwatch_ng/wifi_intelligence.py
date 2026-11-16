@@ -23,7 +23,8 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from netwatch_ng.core.shell import BinaryNotFound, CommandCancelled, run, run_cancellable
+from netwatch_ng.core import network
+from netwatch_ng.core.shell import CommandCancelled, run, run_cancellable
 
 AIRMON_NG = "airmon-ng"
 AIRODUMP_NG = "airodump-ng"
@@ -137,6 +138,25 @@ def _interface_mode(interface: str) -> str:
 
 def _interface_mac(interface: str) -> str | None:
     return _interface_property(interface, "address")
+
+
+def _default_route_interfaces() -> set[str]:
+    """Interfaces currently carrying an IPv4/IPv6 default route.
+
+    These are the links the machine is actually using for connectivity, so a
+    survey that forces one of them into monitor mode will drop that
+    connectivity. The set is best-effort: a missing ``ip`` binary yields an
+    empty set rather than an error.
+    """
+    devices: set[str] = set()
+    for family in ("inet", "inet6"):
+        try:
+            route = network.get_default_gateway(family)
+        except Exception:
+            continue
+        if route is not None and route.device:
+            devices.add(route.device)
+    return devices
 
 
 def list_wireless_interfaces() -> list[WirelessInterface]:
@@ -371,11 +391,17 @@ def parse_airodump_csv(
 
 
 def _read_latest_airodump_csv(directory: str, prefix: str = "scan-") -> str:
-    """Return the text of the most recent airodump-ng CSV file, or ``""``."""
-    candidates = sorted(Path(directory).glob(f"{prefix}*.csv"))
+    """Return the text of the most recent airodump-ng CSV file, or ``""``.
+
+    "Most recent" is decided by modification time, not by name: airodump-ng
+    keeps updating its single ``scan-01.csv`` in place, and a name-based sort
+    would also order ``scan-10.csv`` before ``scan-2.csv``.
+    """
+    candidates = list(Path(directory).glob(f"{prefix}*.csv"))
     if not candidates:
         return ""
-    return candidates[-1].read_text(encoding="utf-8", errors="replace")
+    newest = max(candidates, key=lambda path: path.stat().st_mtime)
+    return newest.read_text(encoding="utf-8", errors="replace")
 
 
 def scan_networks(
@@ -394,6 +420,19 @@ def scan_networks(
         raise ValueError(f"invalid wireless interface name: {interface!r}")
     if timeout <= 0:
         raise ValueError("timeout must be positive")
+
+    # airodump-ng forces its interface into monitor mode, which drops any
+    # connection that interface is carrying. Refuse to do that implicitly to
+    # the adapter holding the machine's default route: the operator must put a
+    # dedicated adapter in monitor mode first (airmon-ng start, or the TUI's
+    # explicit 'm' action) so connectivity is never lost by accident.
+    if _interface_mode(interface) != "monitor" and interface in _default_route_interfaces():
+        raise RuntimeError(
+            f"refusing to survey {interface}: it carries the machine's default "
+            "route, so forcing monitor mode would drop the active connection. "
+            "Use a dedicated adapter already in monitor mode (airmon-ng start "
+            f"{interface}, or press m on the Wi-Fi screen) and survey that one."
+        )
 
     with tempfile.TemporaryDirectory(prefix="netwatch-ng-airodump-") as directory:
         prefix = str(Path(directory) / "scan")
@@ -434,14 +473,24 @@ def scan_available_networks(
     timeout: float = 30.0,
     cancel_event: threading.Event | None = None,
 ) -> WifiSurvey:
-    """Survey the first wireless interface reported by ``airmon-ng``.
+    """Survey a wireless interface reported by ``airmon-ng``.
 
-    Monitor mode is recommended for complete results; a survey on a managed
-    interface only sees the beacons that interface receives.
+    An interface already in monitor mode is preferred, because surveying it
+    does not disturb the machine's connectivity. Falling back to a managed
+    interface is allowed only when it is not carrying the default route;
+    otherwise :func:`scan_networks` refuses the survey rather than dropping
+    the active connection.
     """
     interfaces = list_wireless_interfaces()
     if not interfaces:
         raise RuntimeError("no wireless interface is detected by airmon-ng")
+    for interface in interfaces:
+        if interface.mode == "monitor":
+            return scan_networks(interface.name, timeout=timeout, cancel_event=cancel_event)
+    default_route = _default_route_interfaces()
+    for interface in interfaces:
+        if interface.name not in default_route:
+            return scan_networks(interface.name, timeout=timeout, cancel_event=cancel_event)
     return scan_networks(interfaces[0].name, timeout=timeout, cancel_event=cancel_event)
 
 

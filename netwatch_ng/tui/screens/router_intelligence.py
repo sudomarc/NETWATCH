@@ -18,7 +18,7 @@ def build_router_lines(
         if report is None:
             report = inspect_default_gateway()
     except Exception as exc:
-        return [f"ROUTER INTELLIGENCE", "", f"  [ERROR] router inspection failed: {exc}"]
+        return ["ROUTER INTELLIGENCE", "", f"  [ERROR] router inspection failed: {exc}"]
 
     if report is None:
         return [

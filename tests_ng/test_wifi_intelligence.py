@@ -20,6 +20,7 @@ from netwatch_ng.wifi_intelligence import (
     RadioState,
     Station,
     WifiSurvey,
+    _read_latest_airodump_csv,
     channel_occupancy,
     get_radio_state,
     get_supported_modes,
@@ -370,14 +371,15 @@ def test_scan_available_networks_no_interface(monkeypatch):
         scan_available_networks()
 
 
-def test_scan_available_networks_uses_first_interface(monkeypatch, tmp_path):
+def _fake_interface(name: str, mode: str = "managed"):
+    return type("IF", (), {"name": name, "mode": mode})()
+
+
+def test_scan_available_networks_prefers_monitor_interface(monkeypatch, tmp_path):
     calls = []
 
     def fake_list():
-        return [
-            type("IF", (), {"name": "wlan0"})(),
-            type("IF", (), {"name": "wlan1"})(),
-        ]
+        return [_fake_interface("wlan0"), _fake_interface("wlan1mon", "monitor")]
 
     def fake_scan(interface, timeout=30.0, cancel_event=None):
         calls.append(interface)
@@ -387,9 +389,90 @@ def test_scan_available_networks_uses_first_interface(monkeypatch, tmp_path):
         "netwatch_ng.wifi_intelligence.list_wireless_interfaces", fake_list
     )
     monkeypatch.setattr("netwatch_ng.wifi_intelligence.scan_networks", fake_scan)
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: set()
+    )
     survey = scan_available_networks()
-    assert survey.interface == "wlan0"
-    assert calls == ["wlan0"]
+    # A monitor-mode interface is used first so the active connection is not
+    # disturbed.
+    assert survey.interface == "wlan1mon"
+    assert calls == ["wlan1mon"]
+
+
+def test_scan_available_networks_avoids_default_route_interface(monkeypatch):
+    calls = []
+
+    def fake_list():
+        return [_fake_interface("wlan0"), _fake_interface("wlan1")]
+
+    def fake_scan(interface, timeout=30.0, cancel_event=None):
+        calls.append(interface)
+        return WifiSurvey(interface=interface, access_points=[], stations=[])
+
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence.list_wireless_interfaces", fake_list
+    )
+    monkeypatch.setattr("netwatch_ng.wifi_intelligence.scan_networks", fake_scan)
+    # wlan0 carries the default route: a survey must not be forced onto it.
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: {"wlan0"}
+    )
+    survey = scan_available_networks()
+    assert survey.interface == "wlan1"
+    assert calls == ["wlan1"]
+
+
+def test_scan_networks_refuses_managed_default_route_interface(monkeypatch):
+    """Surveying the adapter that carries the default route would drop it."""
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._interface_mode", lambda interface: "managed"
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: {"wlan0"}
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence.run_cancellable",
+        lambda *args, **kwargs: pytest.fail("airodump-ng must not be launched"),
+    )
+    with pytest.raises(RuntimeError, match="refusing to survey"):
+        scan_networks("wlan0")
+
+
+def test_scan_networks_allows_monitor_interface_on_default_route(monkeypatch):
+    """An interface already in monitor mode is safe to survey."""
+    calls = []
+
+    def fake_run_cancellable(argv, timeout, cancel_event):
+        calls.append(list(argv))
+        return _fake_command_result("")
+
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._interface_mode", lambda interface: "monitor"
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._default_route_interfaces", lambda: {"wlan0mon"}
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence.run_cancellable", fake_run_cancellable
+    )
+    monkeypatch.setattr(
+        "netwatch_ng.wifi_intelligence._read_latest_airodump_csv",
+        lambda directory, prefix="scan-": "",
+    )
+    scan_networks("wlan0mon", timeout=2)
+    assert calls and calls[0][-1] == "wlan0mon"
+
+
+def test_read_latest_airodump_csv_uses_mtime_not_name(tmp_path):
+    older = tmp_path / "scan-10.csv"
+    newer = tmp_path / "scan-2.csv"
+    older.write_text("old")
+    newer.write_text("new")
+    # scan-2 sorts before scan-10 lexically; mtime must decide instead.
+    import os
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+    assert _read_latest_airodump_csv(str(tmp_path)) == "new"
 
 
 def test_run_and_run_cancellable_used_for_aircrack_binaries(monkeypatch):
