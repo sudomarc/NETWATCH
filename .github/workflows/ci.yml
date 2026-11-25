@@ -140,8 +140,7 @@ jobs:
   release-check:
     if: >-
       github.event_name == 'release' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
     runs-on: ubuntu-latest
     outputs:
       should_publish: ${{ steps.detect.outputs.should_publish }}
