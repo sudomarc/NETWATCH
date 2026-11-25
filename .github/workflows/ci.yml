@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["main", "fix/**", "feat/**", "v2/**", "test/**"]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -170,10 +168,6 @@ jobs:
                 echo "No release tag supplied; this is a CI-only run."
                 exit 0
               fi
-              ;;
-            push)
-              RELEASE_JSON="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")"
-              TAG="$(jq -r '.tag_name // empty' <<< "$RELEASE_JSON")"
               ;;
             *)
               exit 0
