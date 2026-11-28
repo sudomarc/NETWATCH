@@ -417,3 +417,18 @@ jobs:
       - name: Deploy APT repository to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  website-seo:
+    name: Website SEO and GEO metadata checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate website metadata and discovery files
+        run: node --test website/tests/*.test.mjs
