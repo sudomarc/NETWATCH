@@ -9,7 +9,7 @@ const sitemap = await readFile(new URL("../sitemap.xml", import.meta.url), "utf8
 const llms = await readFile(new URL("../llms.txt", import.meta.url), "utf8");
 
 test("production head has one canonical and consistent social metadata", () => {
-  assert.match(html, new RegExp(`<link rel="canonical" href="${base.replace(/[.*+?^${}()|[\]\\]/g, "\\\\$&")}">`));
+  assert.ok(html.includes(`<link rel="canonical" href="${base}">`));
   assert.equal((html.match(/rel="canonical"/g) ?? []).length, 1);
   assert.match(html, /property="og:url" content="https:\/\/netwatch-kohl\.vercel\.app\//);
   assert.match(html, /name="twitter:card" content="summary"/);
