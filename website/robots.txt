@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://netwatch-kohl.vercel.app/sitemap.xml
