@@ -38,7 +38,7 @@ test("robots and sitemap expose only the public product page", () => {
 });
 
 test("llms.txt contains documented capabilities and product limitations", () => {
-  assert.match(llms, /authorized to manage/i);
+  assert.match(llms, /networks you own or are authorized to administer/i);
   assert.match(llms, /does not crack Wi-Fi keys/i);
   assert.match(llms, /packet policing/i);
   assert.match(llms, /does not automatically update itself/i);
