@@ -1,0 +1,35 @@
+# NETWATCH NG
+
+> NETWATCH NG is a Python 3 terminal application for Linux network monitoring and authorized network administration.
+
+## Official resources
+- Production product page: https://netwatch-kohl.vercel.app/
+- Source repository: https://github.com/sudomarc/NETWATCH
+- Main documentation: https://github.com/sudomarc/NETWATCH/blob/main/README.md
+- Security policy: https://github.com/sudomarc/NETWATCH/blob/main/SECURITY.md
+- Contributions: https://github.com/sudomarc/NETWATCH/blob/main/CONTRIBUTING.md
+- Debian/APT installation guide: https://github.com/sudomarc/NETWATCH/blob/main/docs/apt-repository.md
+- Signed APT repository: https://sudomarc.github.io/NETWATCH/
+
+## Product summary
+NETWATCH NG provides a keyboard-driven TUI/CLI for Linux operators. Implemented areas include:
+- Local interface, default-route, gateway and DNS inspection.
+- Device discovery using neighbor information and operator-triggered Nmap scans of authorized targets.
+- Gateway management-port probes and read-only UPnP/SSDP inspection of the configured gateway.
+- Wi-Fi radio and access-point inventory using optional Aircrack-ng tools.
+- Explicitly confirmed Netfilter firewall operations.
+- Traffic policing with Linux `tc`; excess packets are dropped rather than smoothly queued.
+- Ping, traceroute, DNS diagnostics and JSON/CSV device exports.
+
+## Important limitations
+- NETWATCH NG does not crack Wi-Fi keys, inject frames, or deauthenticate stations.
+- It does not provide SNMP discovery or detailed device firmware fingerprinting.
+- It does not implement HTB/smooth traffic shaping; its traffic-control behavior is packet policing.
+- It does not automatically update itself or execute downloaded code.
+- Optional system tools may be required for some features. Missing tools are reported as unavailable rather than simulated.
+
+## Intended use
+Use NETWATCH NG only on networks you own or are authorized to administer. Consult the repository README and security policy for supported behavior, privileges and operational risks.
+
+## Version
+The website currently presents version 2.1.1. Verify the repository's latest stable release before quoting a newer version.
